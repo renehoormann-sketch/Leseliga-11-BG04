@@ -7,6 +7,14 @@
   <title>Leseliga 11</title>
   <link rel="stylesheet" href="./styles.css">
   <link rel="manifest" href="./manifest.webmanifest">
+  <style>
+    .recovery-entry{margin-top:24px;padding-top:20px;border-top:1px solid var(--line);max-width:620px}
+    .recovery-entry p,.recovery-help{color:var(--muted);font-size:13px;line-height:1.5}
+    .recovery-form{margin-top:14px;max-width:520px}
+    .recovery-code-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .recovery-code{display:inline-block;padding:12px 14px;border-radius:13px;background:#0d1427;border:1px solid var(--line);font-size:clamp(14px,3.5vw,20px);font-weight:800;letter-spacing:.06em;user-select:all}
+    @media(max-width:520px){.recovery-code-row{align-items:stretch}.recovery-code{width:100%;text-align:center}.recovery-code-row .btn{width:100%}}
+  </style>
 </head>
 <body>
   <main class="shell">
@@ -32,6 +40,19 @@
         <button class="btn primary" type="submit">Leseliga starten</button>
       </form>
       <div id="setupMessage" style="margin-top:14px"></div>
+
+      <div id="recoverSetupBox" class="recovery-entry hidden">
+        <div>
+          <b>Schon bei der Leseliga dabei?</b>
+          <p>Wenn du das Gerät oder den Browser gewechselt hast, kannst du deinen bisherigen Stand mit deinem Wiederherstellungscode zurückholen.</p>
+        </div>
+        <button id="showRecoveryBtn" class="btn ghost" type="button">Konto wiederherstellen</button>
+        <form id="recoveryForm" class="hidden recovery-form">
+          <label class="field"><span>Wiederherstellungscode</span><input id="recoveryCodeInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="LIGA-XXXX-XXXX-XXXX-XXXX" required></label>
+          <button class="btn secondary" type="submit">Bisherigen Stand laden</button>
+          <div id="recoveryMessage" style="margin-top:12px"></div>
+        </form>
+      </div>
     </section>
 
     <div id="appView" class="stack hidden">
@@ -44,6 +65,16 @@
           <div class="metric"><b id="myRank">–</b><span>dein Platz</span></div>
           <div class="metric"><b id="myStreak">0</b><span>Tage Streak</span></div>
         </div>
+      </section>
+
+      <section id="recoveryCard" class="card hidden">
+        <div class="section-head"><div><h3>Dein Wiederherstellungscode</h3><p>Für Gerätewechsel oder gelöschte Browserdaten</p></div><span class="badge">🔑 Zugang sichern</span></div>
+        <div id="recoveryCodeBox">
+          <p class="recovery-help">Notiere oder fotografiere diesen Code und bewahre ihn sicher auf. Wer den Code kennt, kann deinen Leseliga-Stand auf einem anderen Gerät wiederherstellen.</p>
+          <div class="recovery-code-row"><code id="recoveryCode" class="recovery-code">–</code><button id="copyRecoveryBtn" class="btn secondary" type="button">Code kopieren</button></div>
+          <div id="recoveryCopyMessage" style="margin-top:10px"></div>
+        </div>
+        <div id="recoveryUnavailable" class="notice hidden"></div>
       </section>
 
       <section class="grid">
@@ -93,6 +124,19 @@
       <div class="footer"><button id="changeProfileBtn" class="btn ghost">Nickname ändern / Testprofil wechseln</button></div>
     </div>
   </main>
+
+  <div id="recoveryModal" class="modal-backdrop hidden">
+    <section class="card modal">
+      <div class="eyebrow">Wichtig</div>
+      <h2 style="margin-top:0">Sichere deinen Zugang.</h2>
+      <p class="lead">Dieser Code verbindet dich später wieder mit deinem Nickname und deinen bisherigen XP, falls du das Gerät oder den Browser wechselst.</p>
+      <div class="recovery-code-row" style="margin-top:20px"><code id="modalRecoveryCode" class="recovery-code">–</code><button id="copyModalRecoveryBtn" class="btn secondary" type="button">Kopieren</button></div>
+      <div id="modalRecoveryMessage" style="margin-top:10px"></div>
+      <div class="notice" style="margin-top:16px">🔐 Teile den Code nicht mit anderen. Wer ihn kennt, kann deinen Leseliga-Zugang wiederherstellen.</div>
+      <button id="recoveryModalDone" class="btn primary full" type="button" style="margin-top:16px">Ich habe den Code gesichert</button>
+    </section>
+  </div>
+
   <script type="module" src="./student.js"></script>
 </body>
 </html>
