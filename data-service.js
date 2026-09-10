@@ -4,6 +4,9 @@ const SDK_VERSION = "12.18.0";
 const DEMO_DB_KEY = "leseliga_demo_db_v2";
 const DEMO_UID_KEY = "leseliga_demo_uid_v2";
 const DEMO_EVENT = "leseliga-demo-change";
+const STUDENT_ID_KEY = "leseliga_student_id_v1";
+const RECOVERY_CODE_KEY = "leseliga_recovery_code_v1";
+const RECOVERY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const demoSubscribers = new Set();
 
 function yyyyMm(date = new Date()) {
@@ -23,6 +26,34 @@ function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return yyyyMmDd(d);
+}
+
+function normalizeRecoveryCode(value = "") {
+  const compact = String(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!compact.startsWith("LIGA") || compact.length !== 20) return null;
+  return compact;
+}
+
+function formatRecoveryCode(compact) {
+  const normalized = normalizeRecoveryCode(compact);
+  if (!normalized) return "";
+  const body = normalized.slice(4);
+  return `LIGA-${body.slice(0,4)}-${body.slice(4,8)}-${body.slice(8,12)}-${body.slice(12,16)}`;
+}
+
+function makeRecoveryCode() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let body = "";
+  for (const byte of bytes) body += RECOVERY_ALPHABET[byte % RECOVERY_ALPHABET.length];
+  return formatRecoveryCode(`LIGA${body}`);
+}
+
+async function hashRecoveryCode(value) {
+  const compact = normalizeRecoveryCode(value);
+  if (!compact) throw new Error("Der Wiederherstellungscode hat nicht das richtige Format.");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(compact));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function makeDemoSeed() {
@@ -119,29 +150,36 @@ async function createDemoService() {
   return {
     mode: "demo",
     async initStudentSession() {
-      return { uid: getDemoUid(), isAnonymous: true };
+      const uid = getDemoUid();
+      return { uid, studentId: uid, isAnonymous: true };
     },
-    async getProfile(uid) {
-      return loadDemoDb().profiles?.[uid] || null;
+    async getProfile(studentId) {
+      return loadDemoDb().profiles?.[studentId] || null;
     },
-    async saveProfile(uid, nickname) {
+    async saveProfile(studentId, nickname) {
       const db = loadDemoDb();
       db.profiles ||= {};
-      const existing = db.profiles[uid];
-      db.profiles[uid] = { nickname: nickname.trim(), createdAt: existing?.createdAt || Date.now() };
+      const existing = db.profiles[studentId];
+      db.profiles[studentId] = { nickname: nickname.trim(), createdAt: existing?.createdAt || Date.now() };
       saveDemoDb(db);
-      return db.profiles[uid];
+      return db.profiles[studentId];
+    },
+    async ensureRecoveryCode() {
+      return { code: null, isNew: false, demo: true };
+    },
+    async recoverWithCode() {
+      throw new Error("Wiederherstellung ist nur im LIVE-Modus verfügbar.");
     },
     subscribeState(callback) {
       demoSubscribers.add(callback);
       callback(snapshotDemo());
       return () => demoSubscribers.delete(callback);
     },
-    async saveToday(uid, entry) {
+    async saveToday(studentId, entry) {
       const db = loadDemoDb();
       db.days ||= {};
-      db.days[uid] ||= {};
-      db.days[uid][yyyyMmDd()] = { ...entry, updatedAt: Date.now() };
+      db.days[studentId] ||= {};
+      db.days[studentId][yyyyMmDd()] = { ...entry, updatedAt: Date.now() };
       saveDemoDb(db);
     },
     async resetLocalStudent() {
@@ -172,6 +210,9 @@ async function createDemoService() {
       if (db.days?.[uid]?.[date]) delete db.days[uid][date];
       saveDemoDb(db);
     },
+    async adminCreateRecoveryCode() {
+      throw new Error("Wiederherstellungscodes sind nur im LIVE-Modus verfügbar.");
+    },
     async resetDemoData() {
       localStorage.setItem(DEMO_DB_KEY, JSON.stringify(makeDemoSeed()));
       window.dispatchEvent(new CustomEvent(DEMO_EVENT));
@@ -196,24 +237,120 @@ async function createFirebaseService() {
     return cred.user;
   }
 
+  async function createUniqueRecovery(studentId) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const code = makeRecoveryCode();
+      const hash = await hashRecoveryCode(code);
+      const mappingRef = dbMod.ref(db, `recovery/${hash}`);
+      const existing = await dbMod.get(mappingRef);
+      if (existing.exists()) continue;
+      await dbMod.set(mappingRef, studentId);
+      return { code, hash };
+    }
+    throw new Error("Es konnte kein eindeutiger Wiederherstellungscode erzeugt werden.");
+  }
+
   return {
     mode: "firebase",
     async initStudentSession() {
       const user = await ensureStudent();
-      return { uid: user.uid, isAnonymous: user.isAnonymous };
+      let studentId = localStorage.getItem(STUDENT_ID_KEY) || user.uid;
+
+      if (studentId !== user.uid) {
+        try {
+          const claimSnap = await dbMod.get(dbMod.ref(db, `claims/${studentId}/${user.uid}`));
+          if (!claimSnap.exists()) {
+            localStorage.removeItem(STUDENT_ID_KEY);
+            localStorage.removeItem(RECOVERY_CODE_KEY);
+            studentId = user.uid;
+          }
+        } catch {
+          localStorage.removeItem(STUDENT_ID_KEY);
+          localStorage.removeItem(RECOVERY_CODE_KEY);
+          studentId = user.uid;
+        }
+      }
+
+      localStorage.setItem(STUDENT_ID_KEY, studentId);
+      return { uid: user.uid, studentId, isAnonymous: user.isAnonymous };
     },
-    async getProfile(uid) {
-      const snap = await dbMod.get(dbMod.ref(db, `profiles/${uid}`));
+    async getProfile(studentId) {
+      const snap = await dbMod.get(dbMod.ref(db, `profiles/${studentId}`));
       return snap.exists() ? snap.val() : null;
     },
-    async saveProfile(uid, nickname) {
-      const current = await this.getProfile(uid);
+    async saveProfile(studentId, nickname) {
+      const current = await this.getProfile(studentId);
       const profile = {
         nickname: nickname.trim(),
         createdAt: current?.createdAt || dbMod.serverTimestamp()
       };
-      await dbMod.set(dbMod.ref(db, `profiles/${uid}`), profile);
+      await dbMod.set(dbMod.ref(db, `profiles/${studentId}`), profile);
       return profile;
+    },
+    async ensureRecoveryCode(studentId) {
+      const user = await ensureStudent();
+      const activeRef = dbMod.ref(db, `recoveryByStudent/${studentId}`);
+      const localCode = localStorage.getItem(RECOVERY_CODE_KEY);
+
+      try {
+        const activeSnap = await dbMod.get(activeRef);
+        const activeHash = activeSnap.exists() ? activeSnap.val() : null;
+
+        if (localCode) {
+          const localHash = await hashRecoveryCode(localCode);
+          if (activeHash === localHash) return { code: formatRecoveryCode(localCode), isNew: false };
+
+          if (!activeHash && studentId === user.uid) {
+            const mappingRef = dbMod.ref(db, `recovery/${localHash}`);
+            const mappingSnap = await dbMod.get(mappingRef);
+            if (!mappingSnap.exists()) await dbMod.set(mappingRef, studentId);
+            else if (mappingSnap.val() !== studentId) throw new Error("Code-Kollision");
+            await dbMod.set(activeRef, localHash);
+            return { code: formatRecoveryCode(localCode), isNew: false };
+          }
+          localStorage.removeItem(RECOVERY_CODE_KEY);
+        }
+
+        if (activeHash) return { code: null, isNew: false, unavailable: true };
+        if (studentId !== user.uid) return { code: null, isNew: false, unavailable: true };
+
+        const created = await createUniqueRecovery(studentId);
+        await dbMod.set(activeRef, created.hash);
+        localStorage.setItem(RECOVERY_CODE_KEY, created.code);
+        return { code: created.code, isNew: true };
+      } catch (err) {
+        return { code: localCode ? formatRecoveryCode(localCode) : null, isNew: false, pendingRules: true, error: err };
+      }
+    },
+    async recoverWithCode(value) {
+      const user = await ensureStudent();
+      const code = formatRecoveryCode(value);
+      if (!code) throw new Error("Bitte einen vollständigen Code im Format LIGA-XXXX-XXXX-XXXX-XXXX eingeben.");
+      const hash = await hashRecoveryCode(code);
+
+      let mappingSnap;
+      try {
+        mappingSnap = await dbMod.get(dbMod.ref(db, `recovery/${hash}`));
+      } catch {
+        throw new Error("Die Wiederherstellung ist in Firebase noch nicht freigeschaltet.");
+      }
+      if (!mappingSnap.exists()) throw new Error("Dieser Wiederherstellungscode wurde nicht gefunden.");
+
+      const studentId = mappingSnap.val();
+      const activeSnap = await dbMod.get(dbMod.ref(db, `recoveryByStudent/${studentId}`));
+      if (!activeSnap.exists() || activeSnap.val() !== hash) {
+        throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");
+      }
+
+      if (studentId !== user.uid) {
+        const claimRef = dbMod.ref(db, `claims/${studentId}/${user.uid}`);
+        const claimSnap = await dbMod.get(claimRef);
+        if (!claimSnap.exists()) await dbMod.set(claimRef, hash);
+      }
+
+      localStorage.setItem(STUDENT_ID_KEY, studentId);
+      localStorage.setItem(RECOVERY_CODE_KEY, code);
+      return { uid: user.uid, studentId, isAnonymous: user.isAnonymous };
     },
     subscribeState(callback) {
       const cache = { config: null, profiles: null, days: null };
@@ -227,13 +364,15 @@ async function createFirebaseService() {
       ];
       return () => unsubs.forEach((u) => u());
     },
-    async saveToday(uid, entry) {
-      await dbMod.set(dbMod.ref(db, `days/${uid}/${yyyyMmDd()}`), {
+    async saveToday(studentId, entry) {
+      await dbMod.set(dbMod.ref(db, `days/${studentId}/${yyyyMmDd()}`), {
         ...entry,
         updatedAt: dbMod.serverTimestamp()
       });
     },
     async resetLocalStudent() {
+      localStorage.removeItem(STUDENT_ID_KEY);
+      localStorage.removeItem(RECOVERY_CODE_KEY);
       await authMod.signOut(auth);
       location.reload();
     },
@@ -260,6 +399,17 @@ async function createFirebaseService() {
     },
     async adminDeleteDay(uid, date) {
       await dbMod.remove(dbMod.ref(db, `days/${uid}/${date}`));
+    },
+    async adminCreateRecoveryCode(studentId) {
+      const activeRef = dbMod.ref(db, `recoveryByStudent/${studentId}`);
+      const oldSnap = await dbMod.get(activeRef);
+      const oldHash = oldSnap.exists() ? oldSnap.val() : null;
+      const created = await createUniqueRecovery(studentId);
+      await dbMod.set(activeRef, created.hash);
+      if (oldHash && oldHash !== created.hash) {
+        try { await dbMod.remove(dbMod.ref(db, `recovery/${oldHash}`)); } catch { /* active hash already invalidates the old code */ }
+      }
+      return created.code;
     },
     async resetDemoData() {
       throw new Error("Nur im Demo-Modus verfügbar.");
