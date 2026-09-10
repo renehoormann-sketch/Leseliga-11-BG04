@@ -8,6 +8,12 @@
     .recovery-code{display:inline-block;padding:12px 14px;border-radius:13px;background:#0d1427;border:1px solid var(--line);font-size:18px;font-weight:800;letter-spacing:.06em;user-select:all}
     .recovery-result{margin-top:14px}
     .recovery-result .actions{justify-content:flex-start;margin-top:10px}
+    .flag-list{display:grid;gap:10px}
+    .flag-item{padding:12px 14px;border:1px solid rgba(255,209,102,.28);background:rgba(255,209,102,.06);border-radius:14px}
+    .flag-item b{display:block;margin-bottom:4px}
+    .flag-item small{color:var(--muted);line-height:1.45}
+    .flag-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;border:1px solid rgba(255,209,102,.3);color:#ffe6a6;background:rgba(255,209,102,.06);font-size:11px;font-weight:700}
+    .flag-ok{color:var(--accent)}
   </style>
 </head>
 <body>
@@ -76,8 +82,14 @@
 
       <div class="stack">
         <section class="card">
+          <div class="section-head"><div><h3>Plausibilitäts-Hinweise</h3><p id="plausibilitySummary">Automatische Musterprüfung</p></div></div>
+          <div class="notice" style="margin-bottom:14px">⚠️ Ein Hinweis ist <b>kein Beweis für Schummeln</b>. Er soll nur zeigen, bei wem sich ein kurzer Buchcheck oder eine Nachfrage lohnt.</div>
+          <div id="plausibilityList" class="flag-list"></div>
+        </section>
+
+        <section class="card">
           <div class="section-head"><div><h3>Rangliste</h3><p>Aktive Runde</p></div><button id="csvBtn" class="btn">CSV exportieren</button></div>
-          <div class="table-wrap"><table><thead><tr><th>Platz</th><th>Nickname</th><th>XP</th><th>Verlosung</th></tr></thead><tbody id="studentsBody"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Platz</th><th>Nickname</th><th>XP</th><th>Verlosung</th><th>Hinweis</th></tr></thead><tbody id="studentsBody"></tbody></table></div>
         </section>
 
         <section class="card">
