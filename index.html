@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <title>Leseliga 11</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">📚</div>
+        <div><h1 id="brandTitle">LESELIGA 11</h1><p id="seasonText">Lesen. Punkte sammeln. Dranbleiben.</p></div>
+      </div>
+      <div class="actions">
+        <span id="modeBadge" class="badge">…</span>
+        <a class="btn ghost" href="./presentation.html"><span class="label-hide">Präsentation</span> ↗</a>
+      </div>
+    </header>
+
+    <section id="loadingView" class="card"><div class="empty">Leseliga wird geladen …</div></section>
+
+    <section id="setupView" class="card hero hidden">
+      <div class="eyebrow">Dein Einstieg</div>
+      <h2>Wähle deinen Spielernamen.</h2>
+      <p class="lead">Keine Klarnamen nötig. Dein Nickname erscheint in der Rangliste. Danach kannst du deine Lesepunkte selbst eintragen.</p>
+      <form id="nicknameForm" style="margin-top:22px;max-width:520px">
+        <label class="field"><span>Nickname</span><input id="nicknameInput" maxlength="24" minlength="2" placeholder="z. B. BookDragon" required></label>
+        <button class="btn primary" type="submit">Leseliga starten</button>
+      </form>
+      <div id="setupMessage" style="margin-top:14px"></div>
+    </section>
+
+    <div id="appView" class="stack hidden">
+      <section class="card hero">
+        <div class="eyebrow" id="activeMonthLabel">Aktuelle Runde</div>
+        <h2>Hi, <span id="helloName">…</span>.</h2>
+        <p class="lead">20 Minuten lesen = 1 XP. Maximal 2 XP pro Tag zählen für die Rangliste.</p>
+        <div class="metrics">
+          <div class="metric"><b id="myXp">0</b><span>deine XP</span></div>
+          <div class="metric"><b id="myRank">–</b><span>dein Platz</span></div>
+          <div class="metric"><b id="myStreak">0</b><span>Tage Streak</span></div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="stack">
+          <section class="card">
+            <div class="section-head"><div><h3>Heute gelesen?</h3><p id="todayHint">Trage deine heutige Lesezeit ein.</p></div><span id="todayStatus" class="badge">0 / 2 XP</span></div>
+            <div id="monthMismatch" class="notice hidden" style="margin-bottom:14px"></div>
+            <form id="logForm">
+              <div class="xp-picker">
+                <div class="xp-option"><input type="radio" name="xp" id="xp1" value="1" checked><label for="xp1"><b>+1 XP</b><span>mind. 20 Minuten</span></label></div>
+                <div class="xp-option"><input type="radio" name="xp" id="xp2" value="2"><label for="xp2"><b>+2 XP</b><span>mind. 40 Minuten</span></label></div>
+              </div>
+              <label class="field"><span>Buchtitel</span><input id="bookInput" maxlength="80" placeholder="z. B. Tschick" required></label>
+              <label class="field"><span>Seiten / Kapitel / Abschnitt</span><input id="sectionInput" maxlength="80" placeholder="z. B. S. 42–67 oder Kapitel 5" required></label>
+              <button id="saveLogBtn" class="btn primary full" type="submit">Punkte eintragen</button>
+            </form>
+            <div id="logMessage" style="margin-top:12px"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-head"><div><h3>Deine Einträge</h3><p>Aktueller Monat</p></div></div>
+            <div id="history" class="history"></div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="card">
+            <div class="section-head"><div><h3>Klassenziel</h3><p>Alle XP zählen zusammen</p></div></div>
+            <div class="goal-row"><span id="goalText">0 / 180 XP</span><strong id="goalPercent">0 %</strong></div>
+            <div class="progress"><div id="goalBar"></div></div>
+            <div id="goalNote" class="notice ok" style="margin-top:14px">Gemeinsam Richtung Ziel.</div>
+          </section>
+
+          <section class="card">
+            <div class="section-head"><div><h3>Live-Rangliste</h3><p id="participantCount">0 Teilnehmer</p></div></div>
+            <div id="podium" class="podium"></div>
+            <div id="leaderboard" class="leaderboard"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head"><div><h3>Regeln in 20 Sekunden</h3><p>Niedrigschwellig & fair</p></div></div>
+        <div class="notice">📖 20 Minuten = 1 XP · 40+ Minuten = 2 XP · maximal 2 XP pro Kalendertag · Buch, E-Book, Manga und Graphic Novel zählen · Pflichtlektüre nur, wenn die Klasse das gemeinsam so festlegt · fair eintragen.</div>
+      </section>
+
+      <div class="footer"><button id="changeProfileBtn" class="btn ghost">Nickname ändern / Testprofil wechseln</button></div>
+    </div>
+  </main>
+  <script type="module" src="./student.js"></script>
+</body>
+</html>
