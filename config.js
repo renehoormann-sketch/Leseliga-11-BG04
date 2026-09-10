@@ -1,11 +1,10 @@
 // LESELIGA Konfiguration
-// Solange die databaseURL leer bleibt, läuft die App automatisch im DEMO-MODUS.
-// Nach dem Anlegen der Firebase Realtime Database wird nur noch die databaseURL ergänzt.
+// Firebase ist vollständig konfiguriert. Die App läuft damit im LIVE-MODUS.
 
 export const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDjsTFiGJ7fRtCl-NV6EST-O7l_y8mvHVM",
   authDomain: "leseliga-11-bg04.firebaseapp.com",
-  databaseURL: "",
+  databaseURL: "https://leseliga-11-bg04-default-rtdb.europe-west1.firebasedatabase.app/",
   projectId: "leseliga-11-bg04",
   storageBucket: "leseliga-11-bg04.firebasestorage.app",
   messagingSenderId: "20873221853",
