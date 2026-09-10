@@ -17,6 +17,104 @@ function studentId() {
   return session?.studentId || session?.uid;
 }
 
+function localDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function mondayOfWeek(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const daysSinceMonday = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - daysSinceMonday);
+  return d;
+}
+
+function addDays(date, amount) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() + amount);
+  return d;
+}
+
+function xpBetween(dates = {}, startDate, endDate) {
+  const start = localDateKey(startDate);
+  const end = localDateKey(endDate);
+  return Object.entries(dates || {}).reduce((sum, [date, entry]) => {
+    if (date < start || date > end) return sum;
+    return sum + Number(entry?.xp || 0);
+  }, 0);
+}
+
+function ensureWeeklyProgressCard() {
+  if ($("weeklyProgressCard")) return;
+  const card = document.createElement("section");
+  card.id = "weeklyProgressCard";
+  card.className = "card";
+  card.innerHTML = `
+    <div class="section-head">
+      <div><h3>Dein Wochenvergleich</h3><p>Deine Entwicklung im Vergleich zur Vorwoche</p></div>
+      <span id="weeklyTrendBadge" class="badge">–</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><b id="weekCurrentXp">0 XP</b><span>diese Woche bis heute</span></div>
+      <div class="metric"><b id="weekPreviousXp">0 XP</b><span>Vorwoche, gleicher Zeitraum</span></div>
+      <div class="metric"><b id="weekChange">–</b><span>Veränderung</span></div>
+    </div>
+    <div id="weeklyProgressNote" class="notice ok" style="margin-top:14px">Sobald Vergleichsdaten vorhanden sind, siehst du hier deine Entwicklung.</div>
+    <p style="margin:10px 2px 0;color:var(--muted);font-size:12px;line-height:1.5">Verglichen wird immer Montag bis heute mit denselben Wochentagen der Vorwoche. So bleibt der Vergleich auch mitten in der Woche fair.</p>`;
+  const recoveryCard = $("recoveryCard");
+  if (recoveryCard) recoveryCard.insertAdjacentElement("afterend", card);
+  else $("appView")?.prepend(card);
+}
+
+function renderWeeklyProgress(currentState, sid) {
+  ensureWeeklyProgressCard();
+  const now = new Date();
+  const thisMonday = mondayOfWeek(now);
+  const elapsedDays = (now.getDay() + 6) % 7;
+  const previousMonday = addDays(thisMonday, -7);
+  const previousComparableEnd = addDays(previousMonday, elapsedDays);
+  const myDates = currentState.days?.[sid] || {};
+  const currentXp = xpBetween(myDates, thisMonday, now);
+  const previousXp = xpBetween(myDates, previousMonday, previousComparableEnd);
+
+  $("weekCurrentXp").textContent = `${currentXp} XP`;
+  $("weekPreviousXp").textContent = `${previousXp} XP`;
+  const badge = $("weeklyTrendBadge");
+  const change = $("weekChange");
+  const note = $("weeklyProgressNote");
+
+  badge.className = "badge";
+  note.className = "notice ok";
+
+  if (previousXp === 0) {
+    if (currentXp === 0) {
+      change.textContent = "–";
+      badge.textContent = "Noch kein Vergleich";
+      note.textContent = "In beiden Vergleichszeiträumen stehen bisher 0 XP. Mit deinen nächsten Einträgen entsteht dein persönlicher Wochenvergleich.";
+    } else {
+      change.textContent = "Neu";
+      badge.textContent = "↗ gestartet";
+      note.textContent = `Du hast diese Woche bereits ${currentXp} XP gesammelt. In der Vorwoche waren es im gleichen Zeitraum noch 0 XP – deshalb wäre eine Prozentangabe mathematisch nicht sinnvoll.`;
+    }
+    return;
+  }
+
+  const percentChange = Math.round(((currentXp - previousXp) / previousXp) * 100);
+  change.textContent = `${percentChange > 0 ? "+" : ""}${percentChange} %`;
+
+  if (percentChange > 0) {
+    badge.textContent = `↗ +${percentChange} %`;
+    badge.className = "badge live";
+    note.textContent = `Stark: Du hast im gleichen Wochenzeitraum ${percentChange} % mehr XP gesammelt als in der Vorwoche.`;
+  } else if (percentChange < 0) {
+    badge.textContent = `↘ ${percentChange} %`;
+    note.className = "notice";
+    note.textContent = `Aktuell sind es ${Math.abs(percentChange)} % weniger XP als im gleichen Zeitraum der Vorwoche. Bis Sonntag kann sich dein Wochenwert noch verändern.`;
+  } else {
+    badge.textContent = "→ 0 %";
+    note.textContent = "Du liegst genau auf dem Niveau des gleichen Zeitraums der Vorwoche.";
+  }
+}
+
 function renderMode() {
   $("modeBadge").textContent = service.mode === "demo" ? "● DEMO" : "● LIVE";
   $("modeBadge").className = `badge ${service.mode === "demo" ? "demo" : "live"}`;
@@ -110,6 +208,7 @@ function renderState() {
   $("goalNote").textContent = total >= goal ? "🎉 Klassenziel erreicht! Alles Weitere ist Bonus." : `Noch ${goal - total} XP bis zum gemeinsamen Ziel.`;
   $("participantCount").textContent = `${rows.length} Teilnehmer`;
 
+  renderWeeklyProgress(state, sid);
   renderPodium(rows);
   $("leaderboard").innerHTML = rows.map((r) => `<div class="rank-row ${r.uid===sid?"me":""}"><div class="rank">${r.rank}</div><div class="player"><b>${esc(r.nickname)}${r.uid===sid?" · du":""}</b><small>${r.xp >= Number(cfg.raffleXp || 8) ? "🎟️ Verlosung erreicht" : `${Math.max(0, Number(cfg.raffleXp || 8)-r.xp)} XP bis Verlosung`}</small></div><div class="score">${r.xp} XP</div></div>`).join("") || `<div class="empty">Noch keine Teilnehmer.</div>`;
 
