@@ -14,19 +14,42 @@
 
     "profiles": {
       ".read": "auth != null",
-      "$uid": {
-        ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).val() == true)",
+      "$studentId": {
+        ".write": "auth != null && (auth.uid == $studentId || root.child('claims').child($studentId).child(auth.uid).exists() || root.child('admins').child(auth.uid).val() == true)",
         ".validate": "newData.hasChildren(['nickname','createdAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 24 && newData.child('createdAt').isNumber()"
       }
     },
 
     "days": {
       ".read": "auth != null",
-      "$uid": {
+      "$studentId": {
         "$date": {
-          ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).val() == true)",
+          ".write": "auth != null && (auth.uid == $studentId || root.child('claims').child($studentId).child(auth.uid).exists() || root.child('admins').child(auth.uid).val() == true)",
           ".validate": "newData.hasChildren(['xp','book','section','updatedAt']) && newData.child('xp').isNumber() && newData.child('xp').val() >= 1 && newData.child('xp').val() <= 2 && newData.child('book').isString() && newData.child('book').val().length >= 1 && newData.child('book').val().length <= 80 && newData.child('section').isString() && newData.child('section').val().length >= 1 && newData.child('section').val().length <= 80 && newData.child('updatedAt').isNumber()"
         }
+      }
+    },
+
+    "claims": {
+      "$studentId": {
+        "$uid": {
+          ".read": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).val() == true)",
+          ".write": "auth != null && auth.uid == $uid && !data.exists() && newData.isString() && root.child('recovery').child(newData.val()).val() == $studentId && root.child('recoveryByStudent').child($studentId).val() == newData.val()"
+        }
+      }
+    },
+
+    "recovery": {
+      "$hash": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.isString() && (newData.val() == auth.uid || root.child('admins').child(auth.uid).val() == true)) || (data.exists() && !newData.exists() && root.child('admins').child(auth.uid).val() == true))"
+      }
+    },
+
+    "recoveryByStudent": {
+      "$studentId": {
+        ".read": "auth != null && (auth.uid == $studentId || root.child('claims').child($studentId).child(auth.uid).exists() || root.child('admins').child(auth.uid).val() == true)",
+        ".write": "auth != null && ((auth.uid == $studentId && !data.exists()) || root.child('admins').child(auth.uid).val() == true) && newData.isString() && root.child('recovery').child(newData.val()).val() == $studentId"
       }
     },
 
