@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020"><title>Leseliga – Live</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell presentation">
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark">📚</div><div><h1 id="title">LESELIGA 11</h1><p id="season">Live-Rangliste</p></div></div>
+      <div class="actions"><span id="modeBadge" class="badge">…</span><a class="btn ghost" href="./index.html">Schüleransicht ↗</a></div>
+    </header>
+    <section class="card hero">
+      <div class="eyebrow">Gemeinsames Klassenziel</div>
+      <h2><span id="totalXp">0</span> / <span id="goalXp">180</span> XP</h2>
+      <div class="progress" style="height:18px"><div id="goalBar"></div></div>
+      <p class="lead" id="goalText" style="margin-top:12px">Die Klasse sammelt gemeinsam.</p>
+    </section>
+    <section class="card" style="margin-top:18px">
+      <div class="section-head"><div><h3>Live-Rangliste</h3><p id="count">–</p></div><strong id="updated">Live</strong></div>
+      <div id="podium" class="podium"></div>
+      <div id="leaderboard" class="leaderboard"></div>
+    </section>
+    <div class="footer">Diese Ansicht aktualisiert sich automatisch.</div>
+  </main>
+  <script type="module" src="./presentation.js"></script>
+</body>
+</html>
