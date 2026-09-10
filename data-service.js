@@ -337,15 +337,22 @@ async function createFirebaseService() {
       if (!mappingSnap.exists()) throw new Error("Dieser Wiederherstellungscode wurde nicht gefunden.");
 
       const studentId = mappingSnap.val();
-      const activeSnap = await dbMod.get(dbMod.ref(db, `recoveryByStudent/${studentId}`));
-      if (!activeSnap.exists() || activeSnap.val() !== hash) {
-        throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");
-      }
 
       if (studentId !== user.uid) {
         const claimRef = dbMod.ref(db, `claims/${studentId}/${user.uid}`);
         const claimSnap = await dbMod.get(claimRef);
-        if (!claimSnap.exists()) await dbMod.set(claimRef, hash);
+        if (!claimSnap.exists()) {
+          try {
+            await dbMod.set(claimRef, hash);
+          } catch {
+            throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");
+          }
+        }
+      } else {
+        const activeSnap = await dbMod.get(dbMod.ref(db, `recoveryByStudent/${studentId}`));
+        if (!activeSnap.exists() || activeSnap.val() !== hash) {
+          throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");
+        }
       }
 
       localStorage.setItem(STUDENT_ID_KEY, studentId);
