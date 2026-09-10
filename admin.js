@@ -8,7 +8,7 @@ function msg(el,text,type="ok"){el.innerHTML=text?`<div class="notice ${type}">$
 service=await createDataService();
 $("modeBadge").textContent=service.mode==="demo"?"● DEMO":"● LIVE";
 $("modeBadge").className=`badge ${service.mode==="demo"?"demo":"live"}`;
-if(service.mode==="demo"){$("demoCredentials").classList.remove("hidden");$("resetDemoBtn").classList.remove("hidden");$("email").value="lehrer@demo.de";$("password").value="leseliga";}
+if(service.mode==="demo"){$("demoCredentials").classList.remove("hidden");$("resetDemoBtn").classList.remove("hidden");$("recoveryAdminCard").classList.add("hidden");$("email").value="lehrer@demo.de";$("password").value="leseliga";}
 $("entryDate").value=dateUtils.yyyyMmDd();
 
 function render(){
@@ -17,7 +17,10 @@ function render(){
   $("adminTitle").textContent=state.config.className; $("adminSeason").textContent=state.config.seasonLabel;
   $("metricStudents").textContent=rows.length; $("metricXp").textContent=total; $("metricRaffle").textContent=rows.filter(r=>r.xp>=raffle).length;
   $("className").value=state.config.className||""; $("seasonLabel").value=state.config.seasonLabel||""; $("activeMonth").value=state.config.activeMonth||""; $("goalXp").value=state.config.goalXp||180; $("raffleXp").value=raffle;
-  $("studentSelect").innerHTML=rows.map(r=>`<option value="${esc(r.uid)}">${esc(r.nickname)} · ${r.xp} XP</option>`).join("");
+  const options=rows.map(r=>`<option value="${esc(r.uid)}">${esc(r.nickname)} · ${r.xp} XP</option>`).join("");
+  $("studentSelect").innerHTML=options;
+  $("recoveryStudentSelect").innerHTML=options;
+  $("generateRecoveryBtn").disabled=rows.length===0;
   $("studentsBody").innerHTML=rows.map(r=>`<tr><td>${r.rank}</td><td><b>${esc(r.nickname)}</b></td><td>${r.xp}</td><td>${r.xp>=raffle?"✅":"–"}</td></tr>`).join("");
   const activity=getMonthRecords(state,state.config.activeMonth).sort((a,b)=>b.date.localeCompare(a.date)||(b.updatedAt||0)-(a.updatedAt||0));
   $("activityBody").innerHTML=activity.slice(0,80).map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(state.profiles?.[r.uid]?.nickname||"?")}</td><td>+${r.xp}</td><td><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small></td><td><button class="btn danger delete-entry" data-uid="${esc(r.uid)}" data-date="${esc(r.date)}">Löschen</button></td></tr>`).join("")||'<tr><td colspan="5">Noch keine Einträge.</td></tr>';
@@ -29,6 +32,26 @@ $("loginForm").addEventListener("submit",async(e)=>{e.preventDefault();msg($("lo
 $("configForm").addEventListener("submit",async(e)=>{e.preventDefault();try{await service.adminSaveConfig({className:$("className").value.trim(),seasonLabel:$("seasonLabel").value.trim(),activeMonth:$("activeMonth").value,goalXp:Number($("goalXp").value),raffleXp:Number($("raffleXp").value),maxDailyXp:2,minutesPerXp:20});msg($("configMessage"),"Einstellungen gespeichert.");}catch(err){msg($("configMessage"),err.message||"Speichern fehlgeschlagen.","error");}});
 
 $("correctionForm").addEventListener("submit",async(e)=>{e.preventDefault();try{await service.adminUpsertDay($("studentSelect").value,$("entryDate").value,{xp:Number($("entryXp").value),book:$("entryBook").value.trim(),section:$("entrySection").value.trim()});msg($("correctionMessage"),"Eintrag gespeichert.");$("entryBook").value="";$("entrySection").value="";}catch(err){msg($("correctionMessage"),err.message||"Korrektur fehlgeschlagen.","error");}});
+
+$("generateRecoveryBtn").addEventListener("click",async()=>{
+  const uid=$("recoveryStudentSelect").value;
+  const label=$("recoveryStudentSelect").selectedOptions[0]?.textContent||"diese Person";
+  if(!uid)return;
+  if(!confirm(`Neuen Wiederherstellungscode für ${label} erzeugen? Der bisherige Code wird ungültig.`))return;
+  msg($("recoveryAdminMessage"),"");
+  $("recoveryAdminResult").classList.add("hidden");
+  try{
+    const code=await service.adminCreateRecoveryCode(uid);
+    $("adminRecoveryCode").textContent=code;
+    $("recoveryAdminResult").classList.remove("hidden");
+  }catch(err){msg($("recoveryAdminMessage"),err.message||"Code konnte nicht erzeugt werden.","error");}
+});
+
+$("copyAdminRecoveryBtn").addEventListener("click",async()=>{
+  const code=$("adminRecoveryCode").textContent.trim();
+  try{await navigator.clipboard.writeText(code);msg($("recoveryAdminMessage"),"Code kopiert.");}
+  catch{msg($("recoveryAdminMessage"),"Bitte den Code markieren und manuell kopieren.","error");}
+});
 
 $("csvBtn").addEventListener("click",()=>{if(!state)return;const rows=rankLeaderboard(computeLeaderboard(state));const lines=[["Platz","Nickname","XP"],...rows.map(r=>[r.rank,r.nickname,r.xp])].map(row=>row.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");const blob=new Blob(["\ufeff"+lines],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`leseliga_${state.config.activeMonth}.csv`;a.click();URL.revokeObjectURL(a.href);});
 
