@@ -4,6 +4,11 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1020"><title>Leseliga – Lehrerbereich</title>
   <link rel="stylesheet" href="./styles.css">
+  <style>
+    .recovery-code{display:inline-block;padding:12px 14px;border-radius:13px;background:#0d1427;border:1px solid var(--line);font-size:18px;font-weight:800;letter-spacing:.06em;user-select:all}
+    .recovery-result{margin-top:14px}
+    .recovery-result .actions{justify-content:flex-start;margin-top:10px}
+  </style>
 </head>
 <body>
 <main class="shell">
@@ -41,6 +46,18 @@
             <button class="btn primary full" type="submit">Einstellungen speichern</button>
           </form>
           <div id="configMessage" style="margin-top:12px"></div>
+        </section>
+
+        <section id="recoveryAdminCard" class="card">
+          <div class="section-head"><div><h3>Wiederherstellung</h3><p>Ersatzcode bei Gerätewechsel oder verlorenem Code</p></div></div>
+          <label class="field"><span>Schüler</span><select id="recoveryStudentSelect"></select></label>
+          <button id="generateRecoveryBtn" class="btn secondary full" type="button">Neuen Wiederherstellungscode erzeugen</button>
+          <div id="recoveryAdminMessage" style="margin-top:12px"></div>
+          <div id="recoveryAdminResult" class="recovery-result hidden">
+            <div class="notice">Der alte Code ist ab jetzt ungültig. Gib diesen neuen Code nur der betreffenden Person.</div>
+            <div style="margin-top:12px"><code id="adminRecoveryCode" class="recovery-code">–</code></div>
+            <div class="actions"><button id="copyAdminRecoveryBtn" class="btn" type="button">Code kopieren</button></div>
+          </div>
         </section>
 
         <section class="card">
