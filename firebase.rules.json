@@ -1,0 +1,40 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "config": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
+      "goalXp": { ".validate": "newData.isNumber() && newData.val() > 0" },
+      "raffleXp": { ".validate": "newData.isNumber() && newData.val() > 0" },
+      "maxDailyXp": { ".validate": "newData.val() == 2" },
+      "minutesPerXp": { ".validate": "newData.val() == 20" }
+    },
+
+    "profiles": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).val() == true)",
+        ".validate": "newData.hasChildren(['nickname','createdAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 2 && newData.child('nickname').val().length <= 24 && newData.child('createdAt').isNumber()"
+      }
+    },
+
+    "days": {
+      ".read": "auth != null",
+      "$uid": {
+        "$date": {
+          ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).val() == true)",
+          ".validate": "newData.hasChildren(['xp','book','section','updatedAt']) && newData.child('xp').isNumber() && newData.child('xp').val() >= 1 && newData.child('xp').val() <= 2 && newData.child('book').isString() && newData.child('book').val().length >= 1 && newData.child('book').val().length <= 80 && newData.child('section').isString() && newData.child('section').val().length >= 1 && newData.child('section').val().length <= 80 && newData.child('updatedAt').isNumber()"
+        }
+      }
+    },
+
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid && data.val() == true",
+        ".write": false
+      }
+    }
+  }
+}
