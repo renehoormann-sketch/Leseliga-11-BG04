@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020"><title>Leseliga – Lehrerbereich</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">🛠️</div><div><h1>Leseliga · Lehrerbereich</h1><p>Konfiguration, Korrekturen und Export</p></div></div>
+    <div class="actions"><span id="modeBadge" class="badge">…</span><a class="btn ghost" href="./presentation.html">Präsentation ↗</a></div>
+  </header>
+
+  <section id="loginCard" class="card" style="max-width:560px;margin:40px auto">
+    <div class="eyebrow">Admin</div><h2 style="margin-top:0">Lehrer-Login</h2>
+    <div id="demoCredentials" class="notice hidden" style="margin-bottom:14px">Demo-Zugang: <b>lehrer@demo.de</b> · Passwort <b>leseliga</b></div>
+    <form id="loginForm">
+      <label class="field"><span>E-Mail</span><input id="email" type="email" autocomplete="username" required></label>
+      <label class="field"><span>Passwort</span><input id="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary full" type="submit">Anmelden</button>
+    </form>
+    <div id="loginMessage" style="margin-top:12px"></div>
+  </section>
+
+  <div id="adminView" class="stack hidden">
+    <section class="card hero">
+      <div class="eyebrow">Übersicht</div><h2 id="adminTitle">LESELIGA 11</h2><p class="lead" id="adminSeason">–</p>
+      <div class="metrics"><div class="metric"><b id="metricStudents">0</b><span>Teilnehmer</span></div><div class="metric"><b id="metricXp">0</b><span>Klassen-XP</span></div><div class="metric"><b id="metricRaffle">0</b><span>Verlosung erreicht</span></div></div>
+    </section>
+
+    <section class="admin-grid">
+      <div class="stack">
+        <section class="card">
+          <div class="section-head"><div><h3>Runde einstellen</h3><p>Monatswechsel ohne Datenverlust</p></div></div>
+          <form id="configForm">
+            <label class="field"><span>Klassenname</span><input id="className" required></label>
+            <label class="field"><span>Rundenbezeichnung</span><input id="seasonLabel" required></label>
+            <label class="field"><span>Aktiver Monat</span><input id="activeMonth" type="month" required></label>
+            <div class="form-row"><label class="field"><span>Klassenziel (XP)</span><input id="goalXp" type="number" min="1" required></label><label class="field"><span>Verlosung ab XP</span><input id="raffleXp" type="number" min="1" required></label></div>
+            <button class="btn primary full" type="submit">Einstellungen speichern</button>
+          </form>
+          <div id="configMessage" style="margin-top:12px"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-head"><div><h3>Eintrag korrigieren</h3><p>Auch rückwirkend möglich</p></div></div>
+          <form id="correctionForm">
+            <label class="field"><span>Schüler</span><select id="studentSelect" required></select></label>
+            <label class="field"><span>Datum</span><input id="entryDate" type="date" required></label>
+            <label class="field"><span>XP</span><select id="entryXp"><option value="1">1 XP</option><option value="2">2 XP</option></select></label>
+            <label class="field"><span>Buchtitel</span><input id="entryBook" maxlength="80" required></label>
+            <label class="field"><span>Seiten / Kapitel</span><input id="entrySection" maxlength="80" required></label>
+            <button class="btn secondary full" type="submit">Eintrag speichern</button>
+          </form>
+          <div id="correctionMessage" style="margin-top:12px"></div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="card">
+          <div class="section-head"><div><h3>Rangliste</h3><p>Aktive Runde</p></div><button id="csvBtn" class="btn">CSV exportieren</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Platz</th><th>Nickname</th><th>XP</th><th>Verlosung</th></tr></thead><tbody id="studentsBody"></tbody></table></div>
+        </section>
+
+        <section class="card">
+          <div class="section-head"><div><h3>Letzte Einträge</h3><p>Kontrolle & Korrektur</p></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Datum</th><th>Nickname</th><th>XP</th><th>Buch / Abschnitt</th><th></th></tr></thead><tbody id="activityBody"></tbody></table></div>
+        </section>
+      </div>
+    </section>
+
+    <div class="actions" style="justify-content:space-between">
+      <button id="resetDemoBtn" class="btn danger hidden">Demo-Daten zurücksetzen</button>
+      <button id="logoutBtn" class="btn ghost">Abmelden</button>
+    </div>
+  </div>
+</main>
+<script type="module" src="./admin.js"></script>
+</body>
+</html>
