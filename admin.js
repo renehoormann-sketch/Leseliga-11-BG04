@@ -1,5 +1,5 @@
 import { createDataService, dateUtils } from "./data-service.js";
-import { computeLeaderboard, rankLeaderboard, totalClassXp, getMonthRecords } from "./stats.js";
+import { computeLeaderboard, rankLeaderboard, totalClassXp, getMonthRecords, completedBooksCount } from "./stats.js?v=20260915-books1";
 const $=(id)=>document.getElementById(id);
 const esc=(v="")=>String(v).replace(/[&<>'"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
 let service,state,unsubscribe;
@@ -133,10 +133,10 @@ function render(){
   $("recoveryStudentSelect").innerHTML=options;
   $("generateRecoveryBtn").disabled=rows.length===0;
   renderPlausibility(rows,flags);
-  $("studentsBody").innerHTML=rows.map(r=>`<tr><td>${r.rank}</td><td><b>${esc(r.nickname)}</b><br><button class="btn danger hide-student" style="margin-top:6px;padding:6px 8px;font-size:11px" data-uid="${esc(r.uid)}" data-name="${esc(r.nickname)}">Aus Rangliste entfernen</button></td><td>${r.xp}</td><td>${r.xp>=raffle?"✅":"–"}</td><td>${flags.has(r.uid)?'<span class="flag-badge">⚠️ prüfen</span>':'–'}</td></tr>`).join("");
+  $("studentsBody").innerHTML=rows.map(r=>`<tr><td>${r.rank}</td><td><b>${esc(r.nickname)}</b><br><button class="btn danger hide-student" style="margin-top:6px;padding:6px 8px;font-size:11px" data-uid="${esc(r.uid)}" data-name="${esc(r.nickname)}">Aus Rangliste entfernen</button></td><td>${r.xp}</td><td>${completedBooksCount(state,r.uid)}</td><td>${r.xp>=raffle?"✅":"–"}</td><td>${flags.has(r.uid)?'<span class="flag-badge">⚠️ prüfen</span>':'–'}</td></tr>`).join("");
   document.querySelectorAll(".hide-student").forEach(btn=>btn.addEventListener("click",()=>hideStudent(btn.dataset.uid,btn.dataset.name)));
   const activity=getMonthRecords(state,state.config.activeMonth).sort((a,b)=>b.date.localeCompare(a.date)||(b.updatedAt||0)-(a.updatedAt||0));
-  $("activityBody").innerHTML=activity.slice(0,80).map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(state.profiles?.[r.uid]?.nickname||"?")}</td><td>+${r.xp}</td><td><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small></td><td><button class="btn danger delete-entry" data-uid="${esc(r.uid)}" data-date="${esc(r.date)}">Löschen</button></td></tr>`).join("")||'<tr><td colspan="5">Noch keine Einträge.</td></tr>';
+  $("activityBody").innerHTML=activity.slice(0,80).map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(state.profiles?.[r.uid]?.nickname||"?")}</td><td>+${r.xp}</td><td><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small>${r.finished===true?'<br><small>📚 Buch beendet</small>':''}</td><td><button class="btn danger delete-entry" data-uid="${esc(r.uid)}" data-date="${esc(r.date)}">Löschen</button></td></tr>`).join("")||'<tr><td colspan="5">Noch keine Einträge.</td></tr>';
   document.querySelectorAll(".delete-entry").forEach(btn=>btn.addEventListener("click",async()=>{if(confirm(`Eintrag vom ${btn.dataset.date} wirklich löschen?`))await service.adminDeleteDay(btn.dataset.uid,btn.dataset.date);}));
 }
 
@@ -144,7 +144,7 @@ $("loginForm").addEventListener("submit",async(e)=>{e.preventDefault();msg($("lo
 
 $("configForm").addEventListener("submit",async(e)=>{e.preventDefault();try{await service.adminSaveConfig({className:$("className").value.trim(),seasonLabel:$("seasonLabel").value.trim(),activeMonth:$("activeMonth").value,goalXp:Number($("goalXp").value),raffleXp:Number($("raffleXp").value),maxDailyXp:2,minutesPerXp:20});msg($("configMessage"),"Einstellungen gespeichert.");}catch(err){msg($("configMessage"),err.message||"Speichern fehlgeschlagen.","error");}});
 
-$("correctionForm").addEventListener("submit",async(e)=>{e.preventDefault();try{await service.adminUpsertDay($("studentSelect").value,$("entryDate").value,{xp:Number($("entryXp").value),book:$("entryBook").value.trim(),section:$("entrySection").value.trim()});msg($("correctionMessage"),"Eintrag gespeichert.");$("entryBook").value="";$("entrySection").value="";}catch(err){msg($("correctionMessage"),err.message||"Korrektur fehlgeschlagen.","error");}});
+$("correctionForm").addEventListener("submit",async(e)=>{e.preventDefault();try{await service.adminUpsertDay($("studentSelect").value,$("entryDate").value,{xp:Number($("entryXp").value),book:$("entryBook").value.trim(),section:$("entrySection").value.trim(),finished:$("entryFinished").checked});msg($("correctionMessage"),"Eintrag gespeichert.");$("entryBook").value="";$("entrySection").value="";$("entryFinished").checked=false;}catch(err){msg($("correctionMessage"),err.message||"Korrektur fehlgeschlagen.","error");}});
 
 $("generateRecoveryBtn").addEventListener("click",async()=>{
   const uid=$("recoveryStudentSelect").value;
@@ -166,7 +166,7 @@ $("copyAdminRecoveryBtn").addEventListener("click",async()=>{
   catch{msg($("recoveryAdminMessage"),"Bitte den Code markieren und manuell kopieren.","error");}
 });
 
-$("csvBtn").addEventListener("click",()=>{if(!state)return;const rows=rankLeaderboard(computeLeaderboard(state));const flags=plausibilityFlags(state);const lines=[["Platz","Nickname","XP","Plausibilitaets-Hinweis"],...rows.map(r=>[r.rank,r.nickname,r.xp,(flags.get(r.uid)||[]).join(" | ")])].map(row=>row.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");const blob=new Blob(["\ufeff"+lines],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`leseliga_${state.config.activeMonth}.csv`;a.click();URL.revokeObjectURL(a.href);});
+$("csvBtn").addEventListener("click",()=>{if(!state)return;const rows=rankLeaderboard(computeLeaderboard(state));const flags=plausibilityFlags(state);const lines=[["Platz","Nickname","XP","Buecher beendet","Plausibilitaets-Hinweis"],...rows.map(r=>[r.rank,r.nickname,r.xp,completedBooksCount(state,r.uid),(flags.get(r.uid)||[]).join(" | ")])].map(row=>row.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");const blob=new Blob(["\ufeff"+lines],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`leseliga_${state.config.activeMonth}.csv`;a.click();URL.revokeObjectURL(a.href);});
 
 $("resetDemoBtn").addEventListener("click",async()=>{if(confirm("Demo-Rangliste auf Ausgangsdaten zurücksetzen?"))await service.resetDemoData();});
 $("logoutBtn").addEventListener("click",async()=>{unsubscribe?.();await service.adminSignOut();location.reload();});
