@@ -34,15 +34,9 @@ export function getSeasonRecords(state, seasonId = null) {
   return records;
 }
 
-export function getMonthRecords(state, activeMonth) {
-  const records = [];
-  Object.entries(state.days || {}).forEach(([uid, dates]) => {
-    if (isHidden(state, uid)) return;
-    Object.entries(dates || {}).forEach(([date, entry]) => {
-      if (date.startsWith(activeMonth)) records.push({ uid, date, ...entry });
-    });
-  });
-  return records;
+// Bestehende Aufrufer behalten den Funktionsnamen; ausgewertet wird jetzt die aktive Season.
+export function getMonthRecords(state) {
+  return getSeasonRecords(state);
 }
 
 export function computeLeaderboardForSeason(state, seasonId = null) {
@@ -133,8 +127,11 @@ export function getSeasonGoal(state) {
   return Number.isFinite(custom) && custom > 0 ? custom : season.goalXp;
 }
 
+// Kompatibilität mit der bisherigen Schülerlogik: activeMonth enthält künftig den Startmonat der Season.
 export function activeMonthMatchesToday(activeMonth) {
+  const season = SEASON_PLAN.find((item) => item.start.startsWith(activeMonth));
+  if (!season) return false;
   const d = new Date();
-  const todayMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  return activeMonth === todayMonth;
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return today >= season.start && today <= season.end;
 }
