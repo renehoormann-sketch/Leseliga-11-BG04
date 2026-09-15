@@ -1,361 +1,134 @@
 import { createDataService, dateUtils } from "./data-service.js";
 import {
-  computeLeaderboard,
-  rankLeaderboard,
-  totalClassXp,
-  userRecords,
-  userTotalXp,
-  completedBooksCount,
-  currentStreak,
-  activeSeasonMatchesToday,
-  getActiveSeason,
-  getSeasonGoal
+  computeLeaderboard, rankLeaderboard, totalClassXp, userRecords, userTotalXp,
+  completedBooksCount, currentStreak, activeSeasonMatchesToday, getActiveSeason, getSeasonGoal
 } from "./stats.js?v=20260915-seasons1";
 
 const $ = (id) => document.getElementById(id);
 let service, session, profile, state, unsubscribe;
+const YEAR_START="2026-09-01", YEAR_END="2027-06-27";
 
-function esc(value = "") {
-  return String(value).replace(/[&<>'"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+function esc(value = "") {return String(value).replace(/[&<>'"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));}
+function fmtDate(date) {return new Intl.DateTimeFormat("de-DE",{day:"2-digit",month:"2-digit"}).format(new Date(`${date}T12:00:00`));}
+function fmtFullDate(date) {return new Intl.DateTimeFormat("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}).format(new Date(`${date}T12:00:00`));}
+function setMessage(el,text,type="ok"){el.innerHTML=text?`<div class="notice ${type}">${esc(text)}</div>`:"";}
+function studentId(){return session?.studentId||session?.uid;}
+function localDateKey(date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;}
+function mondayOfWeek(date=new Date()){const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-((d.getDay()+6)%7));return d;}
+function addDays(date,amount){const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()+amount);return d;}
+function xpBetween(dates={},startDate,endDate){const start=localDateKey(startDate),end=localDateKey(endDate);return Object.entries(dates||{}).reduce((sum,[date,entry])=>date<start||date>end?sum:sum+Number(entry?.xp||0),0);}
+function weekStartKey(date){return localDateKey(mondayOfWeek(new Date(`${date}T12:00:00`)));}
+function normalizeBook(v=""){return String(v).trim().toLocaleLowerCase("de-DE").replace(/\s+/g," ");}
+function stars(v){const n=Math.max(0,Math.min(5,Number(v||0)));return n?"★".repeat(n)+"☆".repeat(5-n):"";}
+
+function personalBestWeek(currentState,sid){
+  const totals=new Map();
+  userRecords(currentState,sid).forEach(r=>{const w=weekStartKey(r.date);totals.set(w,(totals.get(w)||0)+Number(r.xp||0));});
+  const rows=[...totals.entries()].sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0]));
+  return rows.length?{weekStart:rows[0][0],xp:rows[0][1]}:{weekStart:null,xp:0};
 }
-function fmtDate(date) {
-  return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit" }).format(new Date(`${date}T12:00:00`));
+function longestSeasonStreak(currentState,sid){
+  const dates=[...new Set(userRecords(currentState,sid).filter(r=>Number(r.xp)>0).map(r=>r.date))].sort();
+  let best=0,run=0,last=null;
+  dates.forEach(date=>{const n=Math.floor(new Date(`${date}T12:00:00`).getTime()/86400000);run=last!==null&&n===last+1?run+1:1;best=Math.max(best,run);last=n;});
+  return best;
 }
-function fmtFullDate(date) {
-  return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }).format(new Date(`${date}T12:00:00`));
-}
-function setMessage(el, text, type = "ok") {
-  el.innerHTML = text ? `<div class="notice ${type}">${esc(text)}</div>` : "";
-}
-function studentId() {
-  return session?.studentId || session?.uid;
-}
-
-function localDateKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-function mondayOfWeek(date = new Date()) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const daysSinceMonday = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - daysSinceMonday);
-  return d;
-}
-function addDays(date, amount) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  d.setDate(d.getDate() + amount);
-  return d;
-}
-function xpBetween(dates = {}, startDate, endDate) {
-  const start = localDateKey(startDate);
-  const end = localDateKey(endDate);
-  return Object.entries(dates || {}).reduce((sum, [date, entry]) => {
-    if (date < start || date > end) return sum;
-    return sum + Number(entry?.xp || 0);
-  }, 0);
-}
-
-function ensureWeeklyProgressCard() {
-  if ($("weeklyProgressCard")) return;
-  const card = document.createElement("section");
-  card.id = "weeklyProgressCard";
-  card.className = "card";
-  card.innerHTML = `
-    <div class="section-head">
-      <div><h3>Dein Wochenvergleich</h3><p>Deine Entwicklung im Vergleich zur Vorwoche</p></div>
-      <span id="weeklyTrendBadge" class="badge">–</span>
-    </div>
-    <div class="metrics">
-      <div class="metric"><b id="weekCurrentXp">0 XP</b><span>diese Woche bis heute</span></div>
-      <div class="metric"><b id="weekPreviousXp">0 XP</b><span>Vorwoche, gleicher Zeitraum</span></div>
-      <div class="metric"><b id="weekChange">–</b><span>Veränderung</span></div>
-    </div>
-    <div id="weeklyProgressNote" class="notice ok" style="margin-top:14px">Sobald Vergleichsdaten vorhanden sind, siehst du hier deine Entwicklung.</div>
-    <p style="margin:10px 2px 0;color:var(--muted);font-size:12px;line-height:1.5">Verglichen wird immer Montag bis heute mit denselben Wochentagen der Vorwoche.</p>`;
-  const recoveryCard = $("recoveryCard");
-  if (recoveryCard) recoveryCard.insertAdjacentElement("afterend", card);
-  else $("appView")?.prepend(card);
-}
-
-function renderWeeklyProgress(currentState, sid) {
-  ensureWeeklyProgressCard();
-  const now = new Date();
-  const thisMonday = mondayOfWeek(now);
-  const elapsedDays = (now.getDay() + 6) % 7;
-  const previousMonday = addDays(thisMonday, -7);
-  const previousComparableEnd = addDays(previousMonday, elapsedDays);
-  const myDates = currentState.days?.[sid] || {};
-  const currentXp = xpBetween(myDates, thisMonday, now);
-  const previousXp = xpBetween(myDates, previousMonday, previousComparableEnd);
-
-  $("weekCurrentXp").textContent = `${currentXp} XP`;
-  $("weekPreviousXp").textContent = `${previousXp} XP`;
-  const badge = $("weeklyTrendBadge");
-  const change = $("weekChange");
-  const note = $("weeklyProgressNote");
-  badge.className = "badge";
-  note.className = "notice ok";
-
-  if (previousXp === 0) {
-    if (currentXp === 0) {
-      change.textContent = "–";
-      badge.textContent = "Noch kein Vergleich";
-      note.textContent = "In beiden Vergleichszeiträumen stehen bisher 0 XP.";
-    } else {
-      change.textContent = "Neu";
-      badge.textContent = "↗ gestartet";
-      note.textContent = `Du hast diese Woche bereits ${currentXp} XP gesammelt. In der Vorwoche waren es im gleichen Zeitraum 0 XP.`;
-    }
-    return;
-  }
-
-  const percentChange = Math.round(((currentXp - previousXp) / previousXp) * 100);
-  change.textContent = `${percentChange > 0 ? "+" : ""}${percentChange} %`;
-  if (percentChange > 0) {
-    badge.textContent = `↗ +${percentChange} %`;
-    badge.className = "badge live";
-    note.textContent = `Stark: ${percentChange} % mehr XP als im gleichen Zeitraum der Vorwoche.`;
-  } else if (percentChange < 0) {
-    badge.textContent = `↘ ${percentChange} %`;
-    note.className = "notice";
-    note.textContent = `Aktuell ${Math.abs(percentChange)} % weniger XP als im gleichen Zeitraum der Vorwoche.`;
-  } else {
-    badge.textContent = "→ 0 %";
-    note.textContent = "Du liegst genau auf dem Niveau des gleichen Zeitraums der Vorwoche.";
-  }
-}
-
-function ensureSeasonArchiveCard() {
-  if ($("seasonArchiveCard")) return;
-  const card = document.createElement("section");
-  card.id = "seasonArchiveCard";
-  card.className = "card hidden";
-  card.innerHTML = `<div class="section-head"><div><h3>Vergangene Seasons</h3><p>Deine bisherigen Zwischenergebnisse</p></div></div><div id="seasonArchiveList" class="leaderboard"></div>`;
-  const weekly = $("weeklyProgressCard");
-  if (weekly) weekly.insertAdjacentElement("afterend", card);
-  else $("recoveryCard")?.insertAdjacentElement("afterend", card);
-}
-
-function renderSeasonArchive(currentState, sid) {
-  ensureSeasonArchiveCard();
-  const archives = currentState.config?.seasonArchives || {};
-  const entries = Object.values(archives)
-    .filter(Boolean)
-    .sort((a,b) => String(a.start || "").localeCompare(String(b.start || "")))
-    .map((archive) => {
-      const row = (archive.rows || []).find((item) => item.uid === sid);
-      return row ? { archive, row } : null;
-    })
-    .filter(Boolean);
-  $("seasonArchiveCard").classList.toggle("hidden", entries.length === 0);
-  if (!entries.length) return;
-  $("seasonArchiveList").innerHTML = entries.map(({archive,row}) => `
-    <div class="rank-row me">
-      <div class="rank">#${row.rank}</div>
-      <div class="player"><b>${esc(archive.label || "Season")}</b><small>${esc(fmtFullDate(archive.start))} – ${esc(fmtFullDate(archive.end))}</small></div>
-      <div class="score">${row.xp} XP<br><small>📚 ${row.books || 0}</small></div>
-    </div>`).join("");
-}
-
-function renderMode() {
-  $("modeBadge").textContent = service.mode === "demo" ? "● DEMO" : "● LIVE";
-  $("modeBadge").className = `badge ${service.mode === "demo" ? "demo" : "live"}`;
-  $("recoverSetupBox").classList.toggle("hidden", service.mode !== "firebase");
-}
-
-function renderPodium(rows) {
-  const medals = ["🥈","🥇","🥉"];
-  const order = [rows[1], rows[0], rows[2]];
-  $("podium").innerHTML = order.map((r, i) => r ? `<div class="podium-card ${i===1?"first":""}"><div class="podium-place">${medals[i]}</div><b>${esc(r.nickname)}</b><span>${r.xp} XP</span></div>` : `<div></div>`).join("");
-}
-
-function showRecoveryCode(result, forceModal = false) {
-  if (service.mode !== "firebase") return;
-  $("recoveryCard").classList.remove("hidden");
-  if (result?.code) {
-    $("recoveryCode").textContent = result.code;
-    $("recoveryCodeBox").classList.remove("hidden");
-    $("recoveryUnavailable").classList.add("hidden");
-    if (result.isNew || forceModal) {
-      $("modalRecoveryCode").textContent = result.code;
-      $("recoveryModal").classList.remove("hidden");
-    }
-  } else if (result?.pendingRules) {
-    $("recoveryCodeBox").classList.add("hidden");
-    $("recoveryUnavailable").classList.remove("hidden");
-    $("recoveryUnavailable").textContent = "Die Code-Funktion wird gerade eingerichtet. Dein Leseliga-Konto funktioniert trotzdem weiter.";
-  } else {
-    $("recoveryCodeBox").classList.add("hidden");
-    $("recoveryUnavailable").classList.remove("hidden");
-    $("recoveryUnavailable").textContent = "Bitte frage deine Lehrkraft nach dem aktuellen Wiederherstellungscode.";
-  }
-}
-
-async function prepareRecovery({ forceModal = false } = {}) {
-  if (service.mode !== "firebase" || !profile) return;
-  const result = await service.ensureRecoveryCode(studentId());
-  showRecoveryCode(result, forceModal);
-}
-
-async function copyCode(sourceId, messageId) {
-  const code = $(sourceId).textContent.trim();
-  if (!code || code === "–") return;
-  try {
-    await navigator.clipboard.writeText(code);
-    if (messageId) setMessage($(messageId), "Code kopiert.", "ok");
-  } catch {
-    if (messageId) setMessage($(messageId), "Bitte den Code markieren und manuell kopieren.", "error");
-  }
-}
-
-function renderState() {
-  if (!state || !profile) return;
-  const cfg = state.config;
-  const sid = studentId();
-  const season = getActiveSeason(state);
-  const rows = rankLeaderboard(computeLeaderboard(state));
-  const my = rows.find((r) => r.uid === sid);
-  const total = totalClassXp(state);
-  const goal = getSeasonGoal(state);
-  const percent = Math.min(100, Math.round(total / Math.max(1, goal) * 100));
-  const records = userRecords(state, sid);
-  const today = dateUtils.yyyyMmDd();
-  const todayEntry = state.days?.[sid]?.[today];
-
-  $("brandTitle").textContent = cfg.className || "LESELIGA 11";
-  $("seasonText").textContent = season.label;
-  $("activeMonthLabel").textContent = season.label;
-  $("helloName").textContent = profile.nickname;
-  $("myXp").textContent = userTotalXp(state, sid);
-  $("myRank").textContent = my ? `#${my.rank}` : "–";
-  $("myStreak").textContent = currentStreak(state, sid);
-  $("myBooks").textContent = completedBooksCount(state, sid);
-  $("todayStatus").textContent = `${todayEntry?.xp || 0} / ${cfg.maxDailyXp || 2} XP`;
-  $("todayHint").textContent = todayEntry ? "Du kannst deinen heutigen Eintrag noch bearbeiten." : "Trage deine heutige Lesezeit ein.";
-  $("finishedInput").checked = Boolean(todayEntry?.finished);
-  if (todayEntry) {
-    document.querySelector(`input[name="xp"][value="${todayEntry.xp}"]`)?.click();
-    $("bookInput").value = todayEntry.book || "";
-    $("sectionInput").value = todayEntry.section || "";
-    $("saveLogBtn").textContent = "Heutigen Eintrag aktualisieren";
-  }
-
-  const seasonOk = activeSeasonMatchesToday(state);
-  $("monthMismatch").classList.toggle("hidden", seasonOk);
-  if (!seasonOk) $("monthMismatch").textContent = `${season.label} läuft vom ${fmtFullDate(season.start)} bis ${fmtFullDate(season.end)}. Bitte die Lehrkraft informieren, falls die nächste Season noch nicht gestartet wurde.`;
-  $("saveLogBtn").disabled = !seasonOk;
-
-  $("goalText").textContent = `${total} / ${goal} XP`;
-  $("goalPercent").textContent = `${percent} %`;
-  $("goalBar").style.width = `${percent}%`;
-  $("goalNote").textContent = total >= goal ? "🎉 Season-Klassenziel erreicht! Alles Weitere ist Bonus." : `Noch ${goal - total} XP bis zum gemeinsamen Season-Ziel.`;
-  $("participantCount").textContent = `${rows.length} Teilnehmer`;
-
-  renderWeeklyProgress(state, sid);
-  renderSeasonArchive(state, sid);
-  renderPodium(rows);
-  $("leaderboard").innerHTML = rows.map((r) => `<div class="rank-row ${r.uid===sid?"me":""}"><div class="rank">${r.rank}</div><div class="player"><b>${esc(r.nickname)}${r.uid===sid?" · du":""}</b><small>${r.xp >= Number(cfg.raffleXp || 8) ? "🎟️ Verlosung erreicht" : `${Math.max(0, Number(cfg.raffleXp || 8)-r.xp)} XP bis Verlosung`}</small></div><div class="score">${r.xp} XP</div></div>`).join("") || `<div class="empty">Noch keine Teilnehmer.</div>`;
-
-  $("history").innerHTML = records.length ? records.map((r) => `<div class="history-row"><time>${fmtDate(r.date)}</time><div><span class="xp-pill">+${r.xp}</span></div><div><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small>${r.finished === true ? '<br><small>📚 Buch beendet</small>' : ''}</div></div>`).join("") : `<div class="empty">Noch kein Eintrag in dieser Season.</div>`;
-}
-
-function openApp() {
-  $("setupView").classList.add("hidden");
-  $("appView").classList.remove("hidden");
-  unsubscribe?.();
-  unsubscribe = service.subscribeState((next) => {
-    state = next;
-    profile = state.profiles?.[studentId()] || profile;
-    renderState();
+function allYearRecords(currentState,sid=null){
+  const out=[];
+  Object.entries(currentState.days||{}).forEach(([uid,dates])=>{
+    if((sid&&uid!==sid)||currentState.config?.hiddenStudents?.[uid]===true)return;
+    Object.entries(dates||{}).forEach(([date,entry])=>{if(date>=YEAR_START&&date<=YEAR_END)out.push({uid,date,...entry});});
   });
+  return out;
+}
+function getBadges(currentState,sid){
+  const rec=allYearRecords(currentState,sid),xp=rec.reduce((s,r)=>s+Number(r.xp||0),0),days=new Set(rec.filter(r=>Number(r.xp)>0).map(r=>r.date)).size,books=rec.filter(r=>r.finished===true).length;
+  return [
+    ["🌱","Erster Schritt","1 Lesetag",days>=1,`${Math.min(days,1)}/1`],
+    ["🔥","Dranbleiber","5 Lesetage",days>=5,`${Math.min(days,5)}/5`],
+    ["⭐","10-XP-Club","10 XP gesammelt",xp>=10,`${Math.min(xp,10)}/10`],
+    ["📖","Finisher","1 Buch beendet",books>=1,`${Math.min(books,1)}/1`],
+    ["⚡","Lesepower","30 XP gesammelt",xp>=30,`${Math.min(xp,30)}/30`],
+    ["📚","Bücherwurm","3 Bücher beendet",books>=3,`${Math.min(books,3)}/3`]
+  ];
+}
+function getRecommendations(currentState){
+  const latest=new Map();
+  allYearRecords(currentState).filter(r=>r.finished===true&&Number(r.rating)>=1&&Number(r.rating)<=5&&normalizeBook(r.book)).sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>latest.set(`${r.uid}|||${normalizeBook(r.book)}`,r));
+  const map=new Map();
+  [...latest.values()].forEach(r=>{const k=normalizeBook(r.book),x=map.get(k)||{title:String(r.book).trim(),sum:0,count:0};x.title=String(r.book).trim();x.sum+=Number(r.rating);x.count++;map.set(k,x);});
+  return [...map.values()].map(x=>({...x,avg:Math.round(x.sum/x.count*10)/10})).sort((a,b)=>b.avg-a.avg||b.count-a.count||a.title.localeCompare(b.title,"de"));
+}
+function getClassRecords(currentState){
+  const rows=rankLeaderboard(computeLeaderboard(currentState)),weeks=new Map();
+  rows.forEach(r=>userRecords(currentState,r.uid).forEach(x=>{const w=weekStartKey(x.date);weeks.set(w,(weeks.get(w)||0)+Number(x.xp||0));}));
+  const best=[...weeks.entries()].sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0]))[0]||null;
+  const books=rows.map(r=>({...r,value:completedBooksCount(currentState,r.uid)})),streaks=rows.map(r=>({...r,value:longestSeasonStreak(currentState,r.uid)}));
+  const mb=Math.max(0,...books.map(r=>r.value)),ms=Math.max(0,...streaks.map(r=>r.value));
+  return {best,books:{value:mb,names:mb?books.filter(r=>r.value===mb).map(r=>r.nickname):[]},streak:{value:ms,names:ms?streaks.filter(r=>r.value===ms).map(r=>r.nickname):[]}};
 }
 
-async function start() {
-  service = await createDataService();
-  renderMode();
-  session = await service.initStudentSession();
-  profile = await service.getProfile(studentId());
-  $("loadingView").classList.add("hidden");
-  if (!profile) $("setupView").classList.remove("hidden");
-  else {
-    openApp();
-    await prepareRecovery();
-  }
+function ensureRatingControl(){
+  if($("bookRating"))return;
+  const finish=$("finishedInput")?.closest("label");
+  if(!finish)return;
+  const row=document.createElement("label");row.id="ratingRow";row.className="field hidden";row.innerHTML='<span>Wie fandest du das Buch? (optional)</span><select id="bookRating"><option value="0">Keine Bewertung</option><option value="5">★★★★★ · sehr gut</option><option value="4">★★★★☆ · gut</option><option value="3">★★★☆☆ · okay</option><option value="2">★★☆☆☆ · eher nicht</option><option value="1">★☆☆☆☆ · nicht meins</option></select>';
+  finish.insertAdjacentElement("afterend",row);
+  $("finishedInput").addEventListener("change",()=>row.classList.toggle("hidden",!$("finishedInput").checked));
+}
+function ensureWeeklyProgressCard(){
+  if($("weeklyProgressCard"))return;
+  const card=document.createElement("section");card.id="weeklyProgressCard";card.className="card";card.innerHTML=`<div class="section-head"><div><h3>Dein Wochenvergleich</h3><p>Deine Entwicklung im Vergleich zur Vorwoche</p></div><span id="weeklyTrendBadge" class="badge">–</span></div><div class="metrics four"><div class="metric"><b id="weekCurrentXp">0 XP</b><span>diese Woche</span></div><div class="metric"><b id="weekPreviousXp">0 XP</b><span>Vorwoche</span></div><div class="metric"><b id="weekChange">–</b><span>Veränderung</span></div><div class="metric"><b id="weekBestXp">0 XP</b><span>Bestwoche</span></div></div><div id="weeklyProgressNote" class="notice ok" style="margin-top:14px">Sobald Vergleichsdaten vorhanden sind, siehst du hier deine Entwicklung.</div><p style="margin:10px 2px 0;color:var(--muted);font-size:12px">Verglichen wird immer Montag bis heute mit denselben Wochentagen der Vorwoche.</p>`;
+  $("recoveryCard")?.insertAdjacentElement("afterend",card);
+}
+function renderWeeklyProgress(currentState,sid){
+  ensureWeeklyProgressCard();const now=new Date(),thisMonday=mondayOfWeek(now),elapsed=(now.getDay()+6)%7,previousMonday=addDays(thisMonday,-7),previousEnd=addDays(previousMonday,elapsed),dates=currentState.days?.[sid]||{},current=xpBetween(dates,thisMonday,now),previous=xpBetween(dates,previousMonday,previousEnd),best=personalBestWeek(currentState,sid);
+  $("weekCurrentXp").textContent=`${current} XP`;$("weekPreviousXp").textContent=`${previous} XP`;$("weekBestXp").textContent=`${best.xp} XP`;
+  const badge=$("weeklyTrendBadge"),change=$("weekChange"),note=$("weeklyProgressNote");badge.className="badge";note.className="notice ok";
+  if(previous===0){if(current===0){change.textContent="–";badge.textContent="Noch kein Vergleich";note.textContent="In beiden Vergleichszeiträumen stehen bisher 0 XP.";}else{change.textContent="Neu";badge.textContent="↗ gestartet";note.textContent=`Du hast diese Woche bereits ${current} XP gesammelt.`;}return;}
+  const p=Math.round((current-previous)/previous*100);change.textContent=`${p>0?"+":""}${p} %`;if(p>0){badge.textContent=`↗ +${p} %`;badge.className="badge live";note.textContent=`Stark: ${p} % mehr XP als im gleichen Zeitraum der Vorwoche.`;}else if(p<0){badge.textContent=`↘ ${p} %`;note.className="notice";note.textContent=`Aktuell ${Math.abs(p)} % weniger XP als im gleichen Zeitraum der Vorwoche.`;}else{badge.textContent="→ 0 %";note.textContent="Du liegst genau auf dem Niveau der Vorwoche.";}
+}
+function ensureSeasonArchiveCard(){if($("seasonArchiveCard"))return;const card=document.createElement("section");card.id="seasonArchiveCard";card.className="card hidden";card.innerHTML='<div class="section-head"><div><h3>Vergangene Seasons</h3><p>Deine bisherigen Zwischenergebnisse</p></div></div><div id="seasonArchiveList" class="leaderboard"></div>';$("weeklyProgressCard")?.insertAdjacentElement("afterend",card);}
+function renderSeasonArchive(currentState,sid){
+  ensureSeasonArchiveCard();const entries=Object.values(currentState.config?.seasonArchives||{}).filter(Boolean).sort((a,b)=>String(a.start||"").localeCompare(String(b.start||""))).map(archive=>{const row=(archive.rows||[]).find(item=>item.uid===sid);return row?{archive,row}:null;}).filter(Boolean);$("seasonArchiveCard").classList.toggle("hidden",!entries.length);if(!entries.length)return;
+  $("seasonArchiveList").innerHTML=entries.map(({archive,row})=>{const awards=(archive.awards||[]).filter(a=>(a.uids||[]).includes(sid)).map(a=>`${a.emoji} ${esc(a.title)}`).join(" · ");return `<div class="rank-row me"><div class="rank">#${row.rank}</div><div class="player"><b>${esc(archive.label||"Season")}</b><small>${esc(fmtFullDate(archive.start))} – ${esc(fmtFullDate(archive.end))}${awards?`<br>${awards}`:""}</small></div><div class="score">${row.xp} XP<br><small>📚 ${row.books||0}</small></div></div>`;}).join("");
+}
+function ensureMotivationCards(){
+  if(!$("badgesCard")){const c=document.createElement("section");c.id="badgesCard";c.className="card";c.innerHTML='<div class="section-head"><div><h3>Deine Meilensteine</h3><p>Badges bleiben über alle Seasons erhalten</p></div></div><div id="badgesList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px"></div>';$("seasonArchiveCard")?.insertAdjacentElement("afterend",c);}
+  const board=$("leaderboard")?.closest("section");
+  if(board&&!$("classRecordsCard")){const c=document.createElement("section");c.id="classRecordsCard";c.className="card";c.innerHTML='<div class="section-head"><div><h3>Klassenrekorde</h3><p>Aktuelle Season</p></div></div><div id="classRecords" class="metrics"></div>';board.insertAdjacentElement("afterend",c);}
+  if($("classRecordsCard")&&!$("recommendationsCard")){const c=document.createElement("section");c.id="recommendationsCard";c.className="card";c.innerHTML='<div class="section-head"><div><h3>11BG04 empfiehlt</h3><p>Anonyme Bewertungen beendeter Bücher</p></div></div><div id="recommendationsList" class="leaderboard"></div>';$("classRecordsCard").insertAdjacentElement("afterend",c);}
+}
+function renderMotivation(currentState,sid){
+  ensureMotivationCards();const badges=getBadges(currentState,sid);$("badgesList").innerHTML=badges.map(b=>`<div style="padding:12px;border:1px solid var(--line);border-radius:14px;opacity:${b[3]?1:.45}"><div style="font-size:24px">${b[0]}</div><b>${esc(b[1])}</b><br><small>${esc(b[2])} · ${b[4]}</small></div>`).join("");
+  const rec=getClassRecords(currentState),week=rec.best?`${rec.best[1]} XP`:`0 XP`;$("classRecords").innerHTML=`<div class="metric"><b>${week}</b><span>beste Klassenwoche</span></div><div class="metric"><b>${rec.books.value}</b><span>meiste Bücher${rec.books.names.length?` · ${esc(rec.books.names.join(", "))}`:""}</span></div><div class="metric"><b>${rec.streak.value}</b><span>längste Streak${rec.streak.names.length?` · ${esc(rec.streak.names.join(", "))}`:""}</span></div>`;
+  const tips=getRecommendations(currentState).slice(0,6);$("recommendationsList").innerHTML=tips.length?tips.map((r,i)=>`<div class="rank-row"><div class="rank">${i+1}</div><div class="player"><b>${esc(r.title)}</b><small>${r.count} Bewertung${r.count===1?"":"en"}</small></div><div class="score">${r.avg.toFixed(1).replace(".",",")} ★</div></div>`).join(""):'<div class="empty">Noch keine Buchbewertungen vorhanden.</div>';
 }
 
-$("nicknameForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const nickname = $("nicknameInput").value.trim();
-  if (nickname.length < 2) return setMessage($("setupMessage"), "Bitte mindestens 2 Zeichen verwenden.", "error");
-  try {
-    profile = await service.saveProfile(studentId(), nickname);
-    openApp();
-    await prepareRecovery({ forceModal: true });
-  } catch (err) {
-    setMessage($("setupMessage"), err.message || "Nickname konnte nicht gespeichert werden.", "error");
-  }
-});
+function renderMode(){$("modeBadge").textContent=service.mode==="demo"?"● DEMO":"● LIVE";$("modeBadge").className=`badge ${service.mode==="demo"?"demo":"live"}`;$("recoverSetupBox").classList.toggle("hidden",service.mode!=="firebase");}
+function renderPodium(rows){const medals=["🥈","🥇","🥉"],order=[rows[1],rows[0],rows[2]];$("podium").innerHTML=order.map((r,i)=>r?`<div class="podium-card ${i===1?"first":""}"><div class="podium-place">${medals[i]}</div><b>${esc(r.nickname)}</b><span>${r.xp} XP</span></div>`:"<div></div>").join("");}
+function showRecoveryCode(result,forceModal=false){if(service.mode!=="firebase")return;$("recoveryCard").classList.remove("hidden");if(result?.code){$("recoveryCode").textContent=result.code;$("recoveryCodeBox").classList.remove("hidden");$("recoveryUnavailable").classList.add("hidden");if(result.isNew||forceModal){$("modalRecoveryCode").textContent=result.code;$("recoveryModal").classList.remove("hidden");}}else if(result?.pendingRules){$("recoveryCodeBox").classList.add("hidden");$("recoveryUnavailable").classList.remove("hidden");$("recoveryUnavailable").textContent="Die Code-Funktion wird gerade eingerichtet. Dein Leseliga-Konto funktioniert trotzdem weiter.";}else{$("recoveryCodeBox").classList.add("hidden");$("recoveryUnavailable").classList.remove("hidden");$("recoveryUnavailable").textContent="Bitte frage deine Lehrkraft nach dem aktuellen Wiederherstellungscode.";}}
+async function prepareRecovery({forceModal=false}={}){if(service.mode!=="firebase"||!profile)return;showRecoveryCode(await service.ensureRecoveryCode(studentId()),forceModal);}
+async function copyCode(sourceId,messageId){const code=$(sourceId).textContent.trim();if(!code||code==="–")return;try{await navigator.clipboard.writeText(code);if(messageId)setMessage($(messageId),"Code kopiert.");}catch{if(messageId)setMessage($(messageId),"Bitte den Code markieren und manuell kopieren.","error");}}
 
-$("showRecoveryBtn").addEventListener("click", () => {
-  $("recoveryForm").classList.toggle("hidden");
-  $("recoveryCodeInput").focus();
-});
+function renderState(){
+  if(!state||!profile)return;ensureRatingControl();const cfg=state.config,sid=studentId(),season=getActiveSeason(state),rows=rankLeaderboard(computeLeaderboard(state)),my=rows.find(r=>r.uid===sid),total=totalClassXp(state),goal=getSeasonGoal(state),percent=Math.min(100,Math.round(total/Math.max(1,goal)*100)),records=userRecords(state,sid),today=dateUtils.yyyyMmDd(),todayEntry=state.days?.[sid]?.[today];
+  $("brandTitle").textContent=cfg.className||"LESELIGA 11";$("seasonText").textContent=season.label;$("activeMonthLabel").textContent=season.label;$("helloName").textContent=profile.nickname;$("myXp").textContent=userTotalXp(state,sid);$("myRank").textContent=my?`#${my.rank}`:"–";$("myStreak").textContent=currentStreak(state,sid);$("myBooks").textContent=completedBooksCount(state,sid);$("todayStatus").textContent=`${todayEntry?.xp||0} / ${cfg.maxDailyXp||2} XP`;$("todayHint").textContent=todayEntry?"Du kannst deinen heutigen Eintrag noch bearbeiten.":"Trage deine heutige Lesezeit ein.";
+  $("finishedInput").checked=Boolean(todayEntry?.finished);$("bookRating").value=String(todayEntry?.rating||0);$("ratingRow").classList.toggle("hidden",!$("finishedInput").checked);
+  if(todayEntry){document.querySelector(`input[name="xp"][value="${todayEntry.xp}"]`)?.click();$("bookInput").value=todayEntry.book||"";$("sectionInput").value=todayEntry.section||"";$("saveLogBtn").textContent="Heutigen Eintrag aktualisieren";}
+  const seasonOk=activeSeasonMatchesToday(state);$("monthMismatch").classList.toggle("hidden",seasonOk);if(!seasonOk)$("monthMismatch").textContent=`${season.label} läuft vom ${fmtFullDate(season.start)} bis ${fmtFullDate(season.end)}. Bitte die Lehrkraft informieren, falls die nächste Season noch nicht gestartet wurde.`;$("saveLogBtn").disabled=!seasonOk;
+  $("goalText").textContent=`${total} / ${goal} XP`;$("goalPercent").textContent=`${percent} %`;$("goalBar").style.width=`${percent}%`;$("goalNote").textContent=total>=goal?"🎉 Season-Klassenziel erreicht! Alles Weitere ist Bonus.":`Noch ${goal-total} XP bis zum gemeinsamen Season-Ziel.`;$("participantCount").textContent=`${rows.length} Teilnehmer`;
+  renderWeeklyProgress(state,sid);renderSeasonArchive(state,sid);renderMotivation(state,sid);renderPodium(rows);
+  $("leaderboard").innerHTML=rows.map(r=>`<div class="rank-row ${r.uid===sid?"me":""}"><div class="rank">${r.rank}</div><div class="player"><b>${esc(r.nickname)}${r.uid===sid?" · du":""}</b><small>${r.xp>=Number(cfg.raffleXp||8)?"🎟️ Verlosung erreicht":`${Math.max(0,Number(cfg.raffleXp||8)-r.xp)} XP bis Verlosung`}</small></div><div class="score">${r.xp} XP</div></div>`).join("")||'<div class="empty">Noch keine Teilnehmer.</div>';
+  $("history").innerHTML=records.length?records.map(r=>`<div class="history-row"><time>${fmtDate(r.date)}</time><div><span class="xp-pill">+${r.xp}</span></div><div><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small>${r.finished===true?`<br><small>📚 Buch beendet${Number(r.rating)>0?` · ${stars(r.rating)}`:""}</small>`:""}</div></div>`).join(""):'<div class="empty">Noch kein Eintrag in dieser Season.</div>';
+}
+function openApp(){$("setupView").classList.add("hidden");$("appView").classList.remove("hidden");unsubscribe?.();unsubscribe=service.subscribeState(next=>{state=next;profile=state.profiles?.[studentId()]||profile;renderState();});}
+async function start(){service=await createDataService();renderMode();session=await service.initStudentSession();profile=await service.getProfile(studentId());$("loadingView").classList.add("hidden");if(!profile)$("setupView").classList.remove("hidden");else{openApp();await prepareRecovery();}}
 
-$("recoveryForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  setMessage($("recoveryMessage"), "");
-  try {
-    session = await service.recoverWithCode($("recoveryCodeInput").value);
-    profile = await service.getProfile(studentId());
-    if (!profile) throw new Error("Zu diesem Code wurde kein Leseliga-Profil gefunden.");
-    openApp();
-    await prepareRecovery();
-    setMessage($("logMessage"), `Willkommen zurück, ${profile.nickname}. Dein bisheriger Stand wurde wiederhergestellt.`, "ok");
-  } catch (err) {
-    setMessage($("recoveryMessage"), err.message || "Wiederherstellung fehlgeschlagen.", "error");
-  }
-});
-
-$("logForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const cfg = state?.config || {};
-  const xp = Number(document.querySelector('input[name="xp"]:checked')?.value || 1);
-  const book = $("bookInput").value.trim();
-  const section = $("sectionInput").value.trim();
-  const finished = $("finishedInput").checked;
-  if (!activeSeasonMatchesToday(state)) return setMessage($("logMessage"), "Die nächste Season muss zuerst von der Lehrkraft gestartet werden.", "error");
-  if (![1,2].includes(xp) || xp > Number(cfg.maxDailyXp || 2)) return setMessage($("logMessage"), "Für einen Tag sind maximal 2 XP erlaubt.", "error");
-  if (!book || !section) return setMessage($("logMessage"), "Bitte Buchtitel und Seiten/Kapitel ergänzen.", "error");
-  try {
-    await service.saveToday(studentId(), { xp, book, section, finished });
-    setMessage($("logMessage"), finished ? `${xp} XP gespeichert. 📚 Glückwunsch zum beendeten Buch!` : `${xp} XP gespeichert. Gute Runde!`, "ok");
-  } catch (err) {
-    setMessage($("logMessage"), err.message || "Eintrag konnte nicht gespeichert werden.", "error");
-  }
-});
-
-$("changeProfileBtn").addEventListener("click", async () => {
-  if (service.mode === "demo") {
-    if (confirm("Demo-Testprofil auf diesem Browser wechseln? Die Demo-Rangliste bleibt erhalten.")) {
-      unsubscribe?.();
-      await service.resetLocalStudent();
-    }
-    return;
-  }
-  const next = prompt("Neuen Nickname eingeben:", profile?.nickname || "");
-  if (next === null) return;
-  const nickname = next.trim();
-  if (nickname.length < 2 || nickname.length > 24) {
-    alert("Der Nickname muss 2–24 Zeichen lang sein.");
-    return;
-  }
-  try { await service.saveProfile(studentId(), nickname); }
-  catch (err) { alert(err.message || "Nickname konnte nicht geändert werden."); }
-});
-
-$("copyRecoveryBtn").addEventListener("click", () => copyCode("recoveryCode", "recoveryCopyMessage"));
-$("copyModalRecoveryBtn").addEventListener("click", () => copyCode("modalRecoveryCode", "modalRecoveryMessage"));
-$("recoveryModalDone").addEventListener("click", () => $("recoveryModal").classList.add("hidden"));
-
-start().catch((err) => {
-  $("loadingView").innerHTML = `<div class="notice error">Startfehler: ${esc(err.message || err)}</div>`;
-});
+$("nicknameForm").addEventListener("submit",async e=>{e.preventDefault();const nickname=$("nicknameInput").value.trim();if(nickname.length<2)return setMessage($("setupMessage"),"Bitte mindestens 2 Zeichen verwenden.","error");try{profile=await service.saveProfile(studentId(),nickname);openApp();await prepareRecovery({forceModal:true});}catch(err){setMessage($("setupMessage"),err.message||"Nickname konnte nicht gespeichert werden.","error");}});
+$("showRecoveryBtn").addEventListener("click",()=>{$("recoveryForm").classList.toggle("hidden");$("recoveryCodeInput").focus();});
+$("recoveryForm").addEventListener("submit",async e=>{e.preventDefault();setMessage($("recoveryMessage"),"");try{session=await service.recoverWithCode($("recoveryCodeInput").value);profile=await service.getProfile(studentId());if(!profile)throw new Error("Zu diesem Code wurde kein Leseliga-Profil gefunden.");openApp();await prepareRecovery();setMessage($("logMessage"),`Willkommen zurück, ${profile.nickname}. Dein bisheriger Stand wurde wiederhergestellt.`);}catch(err){setMessage($("recoveryMessage"),err.message||"Wiederherstellung fehlgeschlagen.","error");}});
+$("logForm").addEventListener("submit",async e=>{e.preventDefault();const cfg=state?.config||{},xp=Number(document.querySelector('input[name="xp"]:checked')?.value||1),book=$("bookInput").value.trim(),section=$("sectionInput").value.trim(),finished=$("finishedInput").checked,rating=finished?Number($("bookRating")?.value||0):0;if(!activeSeasonMatchesToday(state))return setMessage($("logMessage"),"Die nächste Season muss zuerst von der Lehrkraft gestartet werden.","error");if(![1,2].includes(xp)||xp>Number(cfg.maxDailyXp||2))return setMessage($("logMessage"),"Für einen Tag sind maximal 2 XP erlaubt.","error");if(!book||!section)return setMessage($("logMessage"),"Bitte Buchtitel und Seiten/Kapitel ergänzen.","error");try{await service.saveToday(studentId(),{xp,book,section,finished,rating});setMessage($("logMessage"),finished?`${xp} XP gespeichert. 📚 Glückwunsch zum beendeten Buch!`:`${xp} XP gespeichert. Gute Runde!`);}catch(err){setMessage($("logMessage"),err.message||"Eintrag konnte nicht gespeichert werden.","error");}});
+$("changeProfileBtn").addEventListener("click",async()=>{if(service.mode==="demo"){if(confirm("Demo-Testprofil auf diesem Browser wechseln? Die Demo-Rangliste bleibt erhalten.")){unsubscribe?.();await service.resetLocalStudent();}return;}const next=prompt("Neuen Nickname eingeben:",profile?.nickname||"");if(next===null)return;const nickname=next.trim();if(nickname.length<2||nickname.length>24){alert("Der Nickname muss 2–24 Zeichen lang sein.");return;}try{await service.saveProfile(studentId(),nickname);}catch(err){alert(err.message||"Nickname konnte nicht geändert werden.");}});
+$("copyRecoveryBtn").addEventListener("click",()=>copyCode("recoveryCode","recoveryCopyMessage"));$("copyModalRecoveryBtn").addEventListener("click",()=>copyCode("modalRecoveryCode","modalRecoveryMessage"));$("recoveryModalDone").addEventListener("click",()=>$("recoveryModal").classList.add("hidden"));
+start().catch(err=>{$("loadingView").innerHTML=`<div class="notice error">Startfehler: ${esc(err.message||err)}</div>`;});
