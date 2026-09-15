@@ -1,5 +1,16 @@
 import { createDataService, dateUtils } from "./data-service.js";
-import { computeLeaderboard, rankLeaderboard, totalClassXp, userRecords, userTotalXp, completedBooksCount, currentStreak, activeMonthMatchesToday } from "./stats.js?v=20260915-books1";
+import {
+  computeLeaderboard,
+  rankLeaderboard,
+  totalClassXp,
+  userRecords,
+  userTotalXp,
+  completedBooksCount,
+  currentStreak,
+  activeSeasonMatchesToday,
+  getActiveSeason,
+  getSeasonGoal
+} from "./stats.js?v=20260915-seasons1";
 
 const $ = (id) => document.getElementById(id);
 let service, session, profile, state, unsubscribe;
@@ -9,6 +20,9 @@ function esc(value = "") {
 }
 function fmtDate(date) {
   return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit" }).format(new Date(`${date}T12:00:00`));
+}
+function fmtFullDate(date) {
+  return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }).format(new Date(`${date}T12:00:00`));
 }
 function setMessage(el, text, type = "ok") {
   el.innerHTML = text ? `<div class="notice ${type}">${esc(text)}</div>` : "";
@@ -20,20 +34,17 @@ function studentId() {
 function localDateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-
 function mondayOfWeek(date = new Date()) {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const daysSinceMonday = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - daysSinceMonday);
   return d;
 }
-
 function addDays(date, amount) {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   d.setDate(d.getDate() + amount);
   return d;
 }
-
 function xpBetween(dates = {}, startDate, endDate) {
   const start = localDateKey(startDate);
   const end = localDateKey(endDate);
@@ -59,7 +70,7 @@ function ensureWeeklyProgressCard() {
       <div class="metric"><b id="weekChange">–</b><span>Veränderung</span></div>
     </div>
     <div id="weeklyProgressNote" class="notice ok" style="margin-top:14px">Sobald Vergleichsdaten vorhanden sind, siehst du hier deine Entwicklung.</div>
-    <p style="margin:10px 2px 0;color:var(--muted);font-size:12px;line-height:1.5">Verglichen wird immer Montag bis heute mit denselben Wochentagen der Vorwoche. So bleibt der Vergleich auch mitten in der Woche fair.</p>`;
+    <p style="margin:10px 2px 0;color:var(--muted);font-size:12px;line-height:1.5">Verglichen wird immer Montag bis heute mit denselben Wochentagen der Vorwoche.</p>`;
   const recoveryCard = $("recoveryCard");
   if (recoveryCard) recoveryCard.insertAdjacentElement("afterend", card);
   else $("appView")?.prepend(card);
@@ -81,7 +92,6 @@ function renderWeeklyProgress(currentState, sid) {
   const badge = $("weeklyTrendBadge");
   const change = $("weekChange");
   const note = $("weeklyProgressNote");
-
   badge.className = "badge";
   note.className = "notice ok";
 
@@ -89,30 +99,61 @@ function renderWeeklyProgress(currentState, sid) {
     if (currentXp === 0) {
       change.textContent = "–";
       badge.textContent = "Noch kein Vergleich";
-      note.textContent = "In beiden Vergleichszeiträumen stehen bisher 0 XP. Mit deinen nächsten Einträgen entsteht dein persönlicher Wochenvergleich.";
+      note.textContent = "In beiden Vergleichszeiträumen stehen bisher 0 XP.";
     } else {
       change.textContent = "Neu";
       badge.textContent = "↗ gestartet";
-      note.textContent = `Du hast diese Woche bereits ${currentXp} XP gesammelt. In der Vorwoche waren es im gleichen Zeitraum noch 0 XP – deshalb wäre eine Prozentangabe mathematisch nicht sinnvoll.`;
+      note.textContent = `Du hast diese Woche bereits ${currentXp} XP gesammelt. In der Vorwoche waren es im gleichen Zeitraum 0 XP.`;
     }
     return;
   }
 
   const percentChange = Math.round(((currentXp - previousXp) / previousXp) * 100);
   change.textContent = `${percentChange > 0 ? "+" : ""}${percentChange} %`;
-
   if (percentChange > 0) {
     badge.textContent = `↗ +${percentChange} %`;
     badge.className = "badge live";
-    note.textContent = `Stark: Du hast im gleichen Wochenzeitraum ${percentChange} % mehr XP gesammelt als in der Vorwoche.`;
+    note.textContent = `Stark: ${percentChange} % mehr XP als im gleichen Zeitraum der Vorwoche.`;
   } else if (percentChange < 0) {
     badge.textContent = `↘ ${percentChange} %`;
     note.className = "notice";
-    note.textContent = `Aktuell sind es ${Math.abs(percentChange)} % weniger XP als im gleichen Zeitraum der Vorwoche. Bis Sonntag kann sich dein Wochenwert noch verändern.`;
+    note.textContent = `Aktuell ${Math.abs(percentChange)} % weniger XP als im gleichen Zeitraum der Vorwoche.`;
   } else {
     badge.textContent = "→ 0 %";
     note.textContent = "Du liegst genau auf dem Niveau des gleichen Zeitraums der Vorwoche.";
   }
+}
+
+function ensureSeasonArchiveCard() {
+  if ($("seasonArchiveCard")) return;
+  const card = document.createElement("section");
+  card.id = "seasonArchiveCard";
+  card.className = "card hidden";
+  card.innerHTML = `<div class="section-head"><div><h3>Vergangene Seasons</h3><p>Deine bisherigen Zwischenergebnisse</p></div></div><div id="seasonArchiveList" class="leaderboard"></div>`;
+  const weekly = $("weeklyProgressCard");
+  if (weekly) weekly.insertAdjacentElement("afterend", card);
+  else $("recoveryCard")?.insertAdjacentElement("afterend", card);
+}
+
+function renderSeasonArchive(currentState, sid) {
+  ensureSeasonArchiveCard();
+  const archives = currentState.config?.seasonArchives || {};
+  const entries = Object.values(archives)
+    .filter(Boolean)
+    .sort((a,b) => String(a.start || "").localeCompare(String(b.start || "")))
+    .map((archive) => {
+      const row = (archive.rows || []).find((item) => item.uid === sid);
+      return row ? { archive, row } : null;
+    })
+    .filter(Boolean);
+  $("seasonArchiveCard").classList.toggle("hidden", entries.length === 0);
+  if (!entries.length) return;
+  $("seasonArchiveList").innerHTML = entries.map(({archive,row}) => `
+    <div class="rank-row me">
+      <div class="rank">#${row.rank}</div>
+      <div class="player"><b>${esc(archive.label || "Season")}</b><small>${esc(fmtFullDate(archive.start))} – ${esc(fmtFullDate(archive.end))}</small></div>
+      <div class="score">${row.xp} XP<br><small>📚 ${row.books || 0}</small></div>
+    </div>`).join("");
 }
 
 function renderMode() {
@@ -129,9 +170,7 @@ function renderPodium(rows) {
 
 function showRecoveryCode(result, forceModal = false) {
   if (service.mode !== "firebase") return;
-  const card = $("recoveryCard");
-  card.classList.remove("hidden");
-
+  $("recoveryCard").classList.remove("hidden");
   if (result?.code) {
     $("recoveryCode").textContent = result.code;
     $("recoveryCodeBox").classList.remove("hidden");
@@ -147,7 +186,7 @@ function showRecoveryCode(result, forceModal = false) {
   } else {
     $("recoveryCodeBox").classList.add("hidden");
     $("recoveryUnavailable").classList.remove("hidden");
-    $("recoveryUnavailable").textContent = "Für dieses Konto wurde ein neuer Code erstellt. Bitte frage deine Lehrkraft nach dem aktuellen Wiederherstellungscode.";
+    $("recoveryUnavailable").textContent = "Bitte frage deine Lehrkraft nach dem aktuellen Wiederherstellungscode.";
   }
 }
 
@@ -172,18 +211,19 @@ function renderState() {
   if (!state || !profile) return;
   const cfg = state.config;
   const sid = studentId();
+  const season = getActiveSeason(state);
   const rows = rankLeaderboard(computeLeaderboard(state));
   const my = rows.find((r) => r.uid === sid);
   const total = totalClassXp(state);
-  const goal = Math.max(1, Number(cfg.goalXp || 180));
-  const percent = Math.min(100, Math.round(total / goal * 100));
+  const goal = getSeasonGoal(state);
+  const percent = Math.min(100, Math.round(total / Math.max(1, goal) * 100));
   const records = userRecords(state, sid);
   const today = dateUtils.yyyyMmDd();
   const todayEntry = state.days?.[sid]?.[today];
 
   $("brandTitle").textContent = cfg.className || "LESELIGA 11";
-  $("seasonText").textContent = cfg.seasonLabel || cfg.activeMonth;
-  $("activeMonthLabel").textContent = cfg.seasonLabel || cfg.activeMonth;
+  $("seasonText").textContent = season.label;
+  $("activeMonthLabel").textContent = season.label;
   $("helloName").textContent = profile.nickname;
   $("myXp").textContent = userTotalXp(state, sid);
   $("myRank").textContent = my ? `#${my.rank}` : "–";
@@ -199,22 +239,23 @@ function renderState() {
     $("saveLogBtn").textContent = "Heutigen Eintrag aktualisieren";
   }
 
-  const monthOk = activeMonthMatchesToday(cfg.activeMonth);
-  $("monthMismatch").classList.toggle("hidden", monthOk);
-  if (!monthOk) $("monthMismatch").textContent = `Die aktive Runde ist ${cfg.activeMonth}. Heute ist ${dateUtils.yyyyMm()}. Bitte die Lehrkraft informieren; Einträge sind bis zur Umstellung gesperrt.`;
-  $("saveLogBtn").disabled = !monthOk;
+  const seasonOk = activeSeasonMatchesToday(state);
+  $("monthMismatch").classList.toggle("hidden", seasonOk);
+  if (!seasonOk) $("monthMismatch").textContent = `${season.label} läuft vom ${fmtFullDate(season.start)} bis ${fmtFullDate(season.end)}. Bitte die Lehrkraft informieren, falls die nächste Season noch nicht gestartet wurde.`;
+  $("saveLogBtn").disabled = !seasonOk;
 
   $("goalText").textContent = `${total} / ${goal} XP`;
   $("goalPercent").textContent = `${percent} %`;
   $("goalBar").style.width = `${percent}%`;
-  $("goalNote").textContent = total >= goal ? "🎉 Klassenziel erreicht! Alles Weitere ist Bonus." : `Noch ${goal - total} XP bis zum gemeinsamen Ziel.`;
+  $("goalNote").textContent = total >= goal ? "🎉 Season-Klassenziel erreicht! Alles Weitere ist Bonus." : `Noch ${goal - total} XP bis zum gemeinsamen Season-Ziel.`;
   $("participantCount").textContent = `${rows.length} Teilnehmer`;
 
   renderWeeklyProgress(state, sid);
+  renderSeasonArchive(state, sid);
   renderPodium(rows);
   $("leaderboard").innerHTML = rows.map((r) => `<div class="rank-row ${r.uid===sid?"me":""}"><div class="rank">${r.rank}</div><div class="player"><b>${esc(r.nickname)}${r.uid===sid?" · du":""}</b><small>${r.xp >= Number(cfg.raffleXp || 8) ? "🎟️ Verlosung erreicht" : `${Math.max(0, Number(cfg.raffleXp || 8)-r.xp)} XP bis Verlosung`}</small></div><div class="score">${r.xp} XP</div></div>`).join("") || `<div class="empty">Noch keine Teilnehmer.</div>`;
 
-  $("history").innerHTML = records.length ? records.map((r) => `<div class="history-row"><time>${fmtDate(r.date)}</time><div><span class="xp-pill">+${r.xp}</span></div><div><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small>${r.finished === true ? '<br><small>📚 Buch beendet</small>' : ''}</div></div>`).join("") : `<div class="empty">Noch kein Eintrag in dieser Runde.</div>`;
+  $("history").innerHTML = records.length ? records.map((r) => `<div class="history-row"><time>${fmtDate(r.date)}</time><div><span class="xp-pill">+${r.xp}</span></div><div><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small>${r.finished === true ? '<br><small>📚 Buch beendet</small>' : ''}</div></div>`).join("") : `<div class="empty">Noch kein Eintrag in dieser Season.</div>`;
 }
 
 function openApp() {
@@ -234,9 +275,8 @@ async function start() {
   session = await service.initStudentSession();
   profile = await service.getProfile(studentId());
   $("loadingView").classList.add("hidden");
-  if (!profile) {
-    $("setupView").classList.remove("hidden");
-  } else {
+  if (!profile) $("setupView").classList.remove("hidden");
+  else {
     openApp();
     await prepareRecovery();
   }
@@ -250,7 +290,9 @@ $("nicknameForm").addEventListener("submit", async (e) => {
     profile = await service.saveProfile(studentId(), nickname);
     openApp();
     await prepareRecovery({ forceModal: true });
-  } catch (err) { setMessage($("setupMessage"), err.message || "Nickname konnte nicht gespeichert werden.", "error"); }
+  } catch (err) {
+    setMessage($("setupMessage"), err.message || "Nickname konnte nicht gespeichert werden.", "error");
+  }
 });
 
 $("showRecoveryBtn").addEventListener("click", () => {
@@ -280,13 +322,15 @@ $("logForm").addEventListener("submit", async (e) => {
   const book = $("bookInput").value.trim();
   const section = $("sectionInput").value.trim();
   const finished = $("finishedInput").checked;
-  if (!activeMonthMatchesToday(cfg.activeMonth)) return setMessage($("logMessage"), "Die Monatsrunde muss zuerst von der Lehrkraft aktualisiert werden.", "error");
+  if (!activeSeasonMatchesToday(state)) return setMessage($("logMessage"), "Die nächste Season muss zuerst von der Lehrkraft gestartet werden.", "error");
   if (![1,2].includes(xp) || xp > Number(cfg.maxDailyXp || 2)) return setMessage($("logMessage"), "Für einen Tag sind maximal 2 XP erlaubt.", "error");
   if (!book || !section) return setMessage($("logMessage"), "Bitte Buchtitel und Seiten/Kapitel ergänzen.", "error");
   try {
     await service.saveToday(studentId(), { xp, book, section, finished });
-    setMessage($("logMessage"), finished ? `${xp} XP gespeichert – und ein Buch als beendet markiert. 🎉` : `${xp} XP gespeichert. Gute Runde!`, "ok");
-  } catch (err) { setMessage($("logMessage"), err.message || "Eintrag konnte nicht gespeichert werden.", "error"); }
+    setMessage($("logMessage"), finished ? `${xp} XP gespeichert. 📚 Glückwunsch zum beendeten Buch!` : `${xp} XP gespeichert. Gute Runde!`, "ok");
+  } catch (err) {
+    setMessage($("logMessage"), err.message || "Eintrag konnte nicht gespeichert werden.", "error");
+  }
 });
 
 $("changeProfileBtn").addEventListener("click", async () => {
@@ -304,11 +348,8 @@ $("changeProfileBtn").addEventListener("click", async () => {
     alert("Der Nickname muss 2–24 Zeichen lang sein.");
     return;
   }
-  try {
-    await service.saveProfile(studentId(), nickname);
-  } catch (err) {
-    alert(err.message || "Nickname konnte nicht geändert werden.");
-  }
+  try { await service.saveProfile(studentId(), nickname); }
+  catch (err) { alert(err.message || "Nickname konnte nicht geändert werden."); }
 });
 
 $("copyRecoveryBtn").addEventListener("click", () => copyCode("recoveryCode", "recoveryCopyMessage"));
