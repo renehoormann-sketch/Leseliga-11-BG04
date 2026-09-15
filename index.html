@@ -13,7 +13,11 @@
     .recovery-form{margin-top:14px;max-width:520px}
     .recovery-code-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
     .recovery-code{display:inline-block;padding:12px 14px;border-radius:13px;background:#0d1427;border:1px solid var(--line);font-size:clamp(14px,3.5vw,20px);font-weight:800;letter-spacing:.06em;user-select:all}
-    @media(max-width:520px){.recovery-code-row{align-items:stretch}.recovery-code{width:100%;text-align:center}.recovery-code-row .btn{width:100%}}
+    .metrics.four{grid-template-columns:repeat(4,1fr)}
+    .finish-check{display:flex;align-items:center;gap:10px;margin:14px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025);cursor:pointer}
+    .finish-check input{width:auto;margin:0;accent-color:var(--accent)}
+    .finish-check span{font-size:13px}
+    @media(max-width:520px){.recovery-code-row{align-items:stretch}.recovery-code{width:100%;text-align:center}.recovery-code-row .btn{width:100%}.metrics.four{grid-template-columns:repeat(2,1fr)}}
   </style>
 </head>
 <body>
@@ -60,10 +64,11 @@
         <div class="eyebrow" id="activeMonthLabel">Aktuelle Runde</div>
         <h2>Hi, <span id="helloName">…</span>.</h2>
         <p class="lead">20 Minuten lesen = 1 XP. Maximal 2 XP pro Tag zählen für die Rangliste.</p>
-        <div class="metrics">
+        <div class="metrics four">
           <div class="metric"><b id="myXp">0</b><span>deine XP</span></div>
           <div class="metric"><b id="myRank">–</b><span>dein Platz</span></div>
           <div class="metric"><b id="myStreak">0</b><span>Tage Streak</span></div>
+          <div class="metric"><b id="myBooks">0</b><span>Bücher beendet</span></div>
         </div>
       </section>
 
@@ -89,6 +94,7 @@
               </div>
               <label class="field"><span>Buchtitel</span><input id="bookInput" maxlength="80" placeholder="z. B. Tschick" required></label>
               <label class="field"><span>Seiten / Kapitel / Abschnitt</span><input id="sectionInput" maxlength="80" placeholder="z. B. S. 42–67 oder Kapitel 5" required></label>
+              <label class="finish-check"><input id="finishedInput" type="checkbox"><span>📚 Ich habe dieses Buch heute beendet.</span></label>
               <button id="saveLogBtn" class="btn primary full" type="submit">Punkte eintragen</button>
             </form>
             <div id="logMessage" style="margin-top:12px"></div>
@@ -137,6 +143,6 @@
     </section>
   </div>
 
-  <script type="module" src="./student.js"></script>
+  <script type="module" src="./student.js?v=20260915-books1"></script>
 </body>
 </html>
