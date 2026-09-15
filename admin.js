@@ -11,6 +11,17 @@ $("modeBadge").className=`badge ${service.mode==="demo"?"demo":"live"}`;
 if(service.mode==="demo"){$("demoCredentials").classList.remove("hidden");$("resetDemoBtn").classList.remove("hidden");$("recoveryAdminCard").classList.add("hidden");$("email").value="lehrer@demo.de";$("password").value="leseliga";}
 $("entryDate").value=dateUtils.yyyyMmDd();
 
+const restoreHiddenBtn=document.createElement("button");
+restoreHiddenBtn.id="restoreHiddenBtn";
+restoreHiddenBtn.className="btn ghost";
+restoreHiddenBtn.type="button";
+restoreHiddenBtn.textContent="Ausgeblendete";
+$("csvBtn").insertAdjacentElement("beforebegin",restoreHiddenBtn);
+
+function hiddenStudents(){
+  return state?.config?.hiddenStudents || {};
+}
+
 function dayNumber(date){
   const [y,m,d]=String(date).split("-").map(Number);
   return Math.floor(Date.UTC(y,m-1,d)/86400000);
@@ -73,10 +84,47 @@ function renderPlausibility(rows,flags){
   }).join("");
 }
 
+async function hideStudent(uid,nickname){
+  if(!confirm(`${nickname} wirklich aus der Leseliga-Wertung entfernen?\n\nDas Profil und die Einträge bleiben gespeichert, zählen aber nicht mehr für Rangliste, Klassenziel oder Auswertungen.`))return;
+  const next={...hiddenStudents(),[uid]:true};
+  try{
+    await service.adminSaveConfig({hiddenStudents:next});
+  }catch(err){
+    alert(err.message||"Profil konnte nicht ausgeblendet werden.");
+  }
+}
+
+restoreHiddenBtn.addEventListener("click",async()=>{
+  if(!state)return;
+  const hidden=Object.entries(hiddenStudents()).filter(([,v])=>v===true);
+  if(!hidden.length){
+    alert("Aktuell sind keine Teilnehmer ausgeblendet.");
+    return;
+  }
+  const choices=hidden.map(([uid],i)=>`${i+1}. ${state.profiles?.[uid]?.nickname||"Ohne Namen"}`);
+  const answer=prompt(`Welches Profil soll wieder eingeblendet werden?\n\n${choices.join("\n")}\n\nNummer eingeben:`);
+  if(answer===null)return;
+  const index=Number(answer)-1;
+  if(!Number.isInteger(index)||index<0||index>=hidden.length){
+    alert("Bitte eine gültige Nummer eingeben.");
+    return;
+  }
+  const uid=hidden[index][0];
+  const next={...hiddenStudents()};
+  delete next[uid];
+  try{
+    await service.adminSaveConfig({hiddenStudents:next});
+  }catch(err){
+    alert(err.message||"Profil konnte nicht wieder eingeblendet werden.");
+  }
+});
+
 function render(){
   if(!state)return;
   const rows=rankLeaderboard(computeLeaderboard(state)), total=totalClassXp(state), raffle=Number(state.config.raffleXp||8);
   const flags=plausibilityFlags(state);
+  const hiddenCount=Object.values(hiddenStudents()).filter(v=>v===true).length;
+  restoreHiddenBtn.textContent=hiddenCount?`Ausgeblendete (${hiddenCount})`:"Ausgeblendete";
   $("adminTitle").textContent=state.config.className; $("adminSeason").textContent=state.config.seasonLabel;
   $("metricStudents").textContent=rows.length; $("metricXp").textContent=total; $("metricRaffle").textContent=rows.filter(r=>r.xp>=raffle).length;
   $("className").value=state.config.className||""; $("seasonLabel").value=state.config.seasonLabel||""; $("activeMonth").value=state.config.activeMonth||""; $("goalXp").value=state.config.goalXp||180; $("raffleXp").value=raffle;
@@ -85,7 +133,8 @@ function render(){
   $("recoveryStudentSelect").innerHTML=options;
   $("generateRecoveryBtn").disabled=rows.length===0;
   renderPlausibility(rows,flags);
-  $("studentsBody").innerHTML=rows.map(r=>`<tr><td>${r.rank}</td><td><b>${esc(r.nickname)}</b></td><td>${r.xp}</td><td>${r.xp>=raffle?"✅":"–"}</td><td>${flags.has(r.uid)?'<span class="flag-badge">⚠️ prüfen</span>':'–'}</td></tr>`).join("");
+  $("studentsBody").innerHTML=rows.map(r=>`<tr><td>${r.rank}</td><td><b>${esc(r.nickname)}</b><br><button class="btn danger hide-student" style="margin-top:6px;padding:6px 8px;font-size:11px" data-uid="${esc(r.uid)}" data-name="${esc(r.nickname)}">Aus Rangliste entfernen</button></td><td>${r.xp}</td><td>${r.xp>=raffle?"✅":"–"}</td><td>${flags.has(r.uid)?'<span class="flag-badge">⚠️ prüfen</span>':'–'}</td></tr>`).join("");
+  document.querySelectorAll(".hide-student").forEach(btn=>btn.addEventListener("click",()=>hideStudent(btn.dataset.uid,btn.dataset.name)));
   const activity=getMonthRecords(state,state.config.activeMonth).sort((a,b)=>b.date.localeCompare(a.date)||(b.updatedAt||0)-(a.updatedAt||0));
   $("activityBody").innerHTML=activity.slice(0,80).map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(state.profiles?.[r.uid]?.nickname||"?")}</td><td>+${r.xp}</td><td><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small></td><td><button class="btn danger delete-entry" data-uid="${esc(r.uid)}" data-date="${esc(r.date)}">Löschen</button></td></tr>`).join("")||'<tr><td colspan="5">Noch keine Einträge.</td></tr>';
   document.querySelectorAll(".delete-entry").forEach(btn=>btn.addEventListener("click",async()=>{if(confirm(`Eintrag vom ${btn.dataset.date} wirklich löschen?`))await service.adminDeleteDay(btn.dataset.uid,btn.dataset.date);}));

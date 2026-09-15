@@ -1,6 +1,11 @@
+function isHidden(state, uid) {
+  return state.config?.hiddenStudents?.[uid] === true;
+}
+
 export function getMonthRecords(state, activeMonth) {
   const records = [];
   Object.entries(state.days || {}).forEach(([uid, dates]) => {
+    if (isHidden(state, uid)) return;
     Object.entries(dates || {}).forEach(([date, entry]) => {
       if (date.startsWith(activeMonth)) records.push({ uid, date, ...entry });
     });
@@ -11,11 +16,14 @@ export function getMonthRecords(state, activeMonth) {
 export function computeLeaderboard(state) {
   const activeMonth = state.config?.activeMonth || "";
   const totals = {};
-  Object.keys(state.profiles || {}).forEach((uid) => { totals[uid] = 0; });
+  Object.entries(state.profiles || {}).forEach(([uid]) => {
+    if (!isHidden(state, uid)) totals[uid] = 0;
+  });
   getMonthRecords(state, activeMonth).forEach((r) => {
     totals[r.uid] = (totals[r.uid] || 0) + Number(r.xp || 0);
   });
   return Object.entries(state.profiles || {})
+    .filter(([uid]) => !isHidden(state, uid))
     .map(([uid, profile]) => ({ uid, nickname: profile.nickname || "Ohne Namen", xp: totals[uid] || 0 }))
     .sort((a, b) => b.xp - a.xp || a.nickname.localeCompare(b.nickname, "de"));
 }
