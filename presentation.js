@@ -1,5 +1,5 @@
 import { createDataService } from "./data-service.js";
-import { computeLeaderboard, rankLeaderboard, totalClassXp } from "./stats.js";
+import { computeLeaderboard, rankLeaderboard, totalClassXp, getActiveSeason, getSeasonGoal } from "./stats.js?v=20260915-seasons1";
 const $ = (id) => document.getElementById(id);
 const esc = (v="") => String(v).replace(/[&<>'"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
 
@@ -13,12 +13,12 @@ await service.initStudentSession();
 $("modeBadge").textContent = service.mode === "demo" ? "● DEMO" : "● LIVE";
 $("modeBadge").className = `badge ${service.mode === "demo" ? "demo" : "live"}`;
 service.subscribeState((state)=>{
-  const rows=rankLeaderboard(computeLeaderboard(state)), total=totalClassXp(state), goal=Math.max(1,Number(state.config.goalXp||180));
-  const percent=Math.min(100,Math.round(total/goal*100));
+  const season=getActiveSeason(state), rows=rankLeaderboard(computeLeaderboard(state)), total=totalClassXp(state), goal=getSeasonGoal(state);
+  const percent=Math.min(100,Math.round(total/Math.max(1,goal)*100));
   $("title").textContent=state.config.className||"LESELIGA 11";
-  $("season").textContent=state.config.seasonLabel||state.config.activeMonth;
+  $("season").textContent=season.label;
   $("totalXp").textContent=total; $("goalXp").textContent=goal; $("goalBar").style.width=`${percent}%`;
-  $("goalText").textContent= total>=goal ? "🎉 Klassenziel erreicht – jetzt geht es um Bonus-XP!" : `Noch ${goal-total} XP bis zum Klassenziel.`;
+  $("goalText").textContent= total>=goal ? "🎉 Season-Klassenziel erreicht – jetzt geht es um Bonus-XP!" : `Noch ${goal-total} XP bis zum Season-Klassenziel.`;
   $("count").textContent=`${rows.length} Teilnehmer · Top 10`;
   $("updated").textContent=`Live · ${new Intl.DateTimeFormat("de-DE",{hour:"2-digit",minute:"2-digit"}).format(new Date())}`;
   renderPodium(rows);
