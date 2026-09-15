@@ -1,5 +1,5 @@
 import { createDataService, dateUtils } from "./data-service.js";
-import { computeLeaderboard, rankLeaderboard, totalClassXp, userRecords, userTotalXp, currentStreak, activeMonthMatchesToday } from "./stats.js";
+import { computeLeaderboard, rankLeaderboard, totalClassXp, userRecords, userTotalXp, completedBooksCount, currentStreak, activeMonthMatchesToday } from "./stats.js?v=20260915-books1";
 
 const $ = (id) => document.getElementById(id);
 let service, session, profile, state, unsubscribe;
@@ -188,8 +188,10 @@ function renderState() {
   $("myXp").textContent = userTotalXp(state, sid);
   $("myRank").textContent = my ? `#${my.rank}` : "–";
   $("myStreak").textContent = currentStreak(state, sid);
+  $("myBooks").textContent = completedBooksCount(state, sid);
   $("todayStatus").textContent = `${todayEntry?.xp || 0} / ${cfg.maxDailyXp || 2} XP`;
   $("todayHint").textContent = todayEntry ? "Du kannst deinen heutigen Eintrag noch bearbeiten." : "Trage deine heutige Lesezeit ein.";
+  $("finishedInput").checked = Boolean(todayEntry?.finished);
   if (todayEntry) {
     document.querySelector(`input[name="xp"][value="${todayEntry.xp}"]`)?.click();
     $("bookInput").value = todayEntry.book || "";
@@ -212,7 +214,7 @@ function renderState() {
   renderPodium(rows);
   $("leaderboard").innerHTML = rows.map((r) => `<div class="rank-row ${r.uid===sid?"me":""}"><div class="rank">${r.rank}</div><div class="player"><b>${esc(r.nickname)}${r.uid===sid?" · du":""}</b><small>${r.xp >= Number(cfg.raffleXp || 8) ? "🎟️ Verlosung erreicht" : `${Math.max(0, Number(cfg.raffleXp || 8)-r.xp)} XP bis Verlosung`}</small></div><div class="score">${r.xp} XP</div></div>`).join("") || `<div class="empty">Noch keine Teilnehmer.</div>`;
 
-  $("history").innerHTML = records.length ? records.map((r) => `<div class="history-row"><time>${fmtDate(r.date)}</time><div><span class="xp-pill">+${r.xp}</span></div><div><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small></div></div>`).join("") : `<div class="empty">Noch kein Eintrag in dieser Runde.</div>`;
+  $("history").innerHTML = records.length ? records.map((r) => `<div class="history-row"><time>${fmtDate(r.date)}</time><div><span class="xp-pill">+${r.xp}</span></div><div><b>${esc(r.book)}</b><br><small>${esc(r.section)}</small>${r.finished === true ? '<br><small>📚 Buch beendet</small>' : ''}</div></div>`).join("") : `<div class="empty">Noch kein Eintrag in dieser Runde.</div>`;
 }
 
 function openApp() {
@@ -277,12 +279,13 @@ $("logForm").addEventListener("submit", async (e) => {
   const xp = Number(document.querySelector('input[name="xp"]:checked')?.value || 1);
   const book = $("bookInput").value.trim();
   const section = $("sectionInput").value.trim();
+  const finished = $("finishedInput").checked;
   if (!activeMonthMatchesToday(cfg.activeMonth)) return setMessage($("logMessage"), "Die Monatsrunde muss zuerst von der Lehrkraft aktualisiert werden.", "error");
   if (![1,2].includes(xp) || xp > Number(cfg.maxDailyXp || 2)) return setMessage($("logMessage"), "Für einen Tag sind maximal 2 XP erlaubt.", "error");
   if (!book || !section) return setMessage($("logMessage"), "Bitte Buchtitel und Seiten/Kapitel ergänzen.", "error");
   try {
-    await service.saveToday(studentId(), { xp, book, section });
-    setMessage($("logMessage"), `${xp} XP gespeichert. Gute Runde!`, "ok");
+    await service.saveToday(studentId(), { xp, book, section, finished });
+    setMessage($("logMessage"), finished ? `${xp} XP gespeichert – und ein Buch als beendet markiert. 🎉` : `${xp} XP gespeichert. Gute Runde!`, "ok");
   } catch (err) { setMessage($("logMessage"), err.message || "Eintrag konnte nicht gespeichert werden.", "error"); }
 });
 
