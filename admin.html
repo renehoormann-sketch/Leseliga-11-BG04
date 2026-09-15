@@ -21,7 +21,7 @@
 <body>
 <main class="shell">
   <header class="topbar">
-    <div class="brand"><div class="brand-mark">🛠️</div><div><h1>Leseliga · Lehrerbereich</h1><p>Konfiguration, Korrekturen und Export</p></div></div>
+    <div class="brand"><div class="brand-mark">🛠️</div><div><h1>Leseliga · Lehrerbereich</h1><p>Seasons, Korrekturen und Auswertung</p></div></div>
     <div class="actions"><span id="modeBadge" class="badge">…</span><a class="btn ghost" href="./presentation.html">Präsentation ↗</a></div>
   </header>
 
@@ -39,18 +39,18 @@
   <div id="adminView" class="stack hidden">
     <section class="card hero">
       <div class="eyebrow">Übersicht</div><h2 id="adminTitle">LESELIGA 11</h2><p class="lead" id="adminSeason">–</p>
-      <div class="metrics"><div class="metric"><b id="metricStudents">0</b><span>Teilnehmer</span></div><div class="metric"><b id="metricXp">0</b><span>Klassen-XP</span></div><div class="metric"><b id="metricRaffle">0</b><span>Verlosung erreicht</span></div></div>
+      <div class="metrics"><div class="metric"><b id="metricStudents">0</b><span>Teilnehmer</span></div><div class="metric"><b id="metricXp">0</b><span>Season-XP</span></div><div class="metric"><b id="metricRaffle">0</b><span>Verlosung erreicht</span></div></div>
     </section>
 
     <section class="admin-grid">
       <div class="stack">
         <section class="card">
-          <div class="section-head"><div><h3>Runde einstellen</h3><p>Monatswechsel ohne Datenverlust</p></div></div>
+          <div class="section-head"><div><h3>Season-Einstellungen</h3><p>Die aktive Season wird über die Season-Steuerung gewechselt.</p></div></div>
           <form id="configForm">
             <label class="field"><span>Klassenname</span><input id="className" required></label>
-            <label class="field"><span>Rundenbezeichnung</span><input id="seasonLabel" required></label>
-            <label class="field"><span>Aktiver Monat</span><input id="activeMonth" type="month" required></label>
-            <div class="form-row"><label class="field"><span>Klassenziel (XP)</span><input id="goalXp" type="number" min="1" required></label><label class="field"><span>Verlosung ab XP</span><input id="raffleXp" type="number" min="1" required></label></div>
+            <label class="field"><span>Aktive Season</span><input id="seasonLabel" required></label>
+            <label class="field"><span>Season-Startmonat</span><input id="activeMonth" type="month" required></label>
+            <div class="form-row"><label class="field"><span>Season-Klassenziel (XP)</span><input id="goalXp" type="number" min="1" required></label><label class="field"><span>Verlosung ab XP</span><input id="raffleXp" type="number" min="1" required></label></div>
             <button class="btn primary full" type="submit">Einstellungen speichern</button>
           </form>
           <div id="configMessage" style="margin-top:12px"></div>
@@ -91,12 +91,12 @@
         </section>
 
         <section class="card">
-          <div class="section-head"><div><h3>Rangliste</h3><p>Aktive Runde</p></div><button id="csvBtn" class="btn">CSV exportieren</button></div>
+          <div class="section-head"><div><h3>Rangliste</h3><p>Aktive Season</p></div><button id="csvBtn" class="btn">CSV exportieren</button></div>
           <div class="table-wrap"><table><thead><tr><th>Platz</th><th>Nickname</th><th>XP</th><th>Bücher</th><th>Verlosung</th><th>Hinweis</th></tr></thead><tbody id="studentsBody"></tbody></table></div>
         </section>
 
         <section class="card">
-          <div class="section-head"><div><h3>Letzte Einträge</h3><p>Kontrolle & Korrektur</p></div></div>
+          <div class="section-head"><div><h3>Letzte Einträge</h3><p>Aktive Season · Kontrolle & Korrektur</p></div></div>
           <div class="table-wrap"><table><thead><tr><th>Datum</th><th>Nickname</th><th>XP</th><th>Buch / Abschnitt</th><th></th></tr></thead><tbody id="activityBody"></tbody></table></div>
         </section>
       </div>
@@ -108,6 +108,6 @@
     </div>
   </div>
 </main>
-<script type="module" src="./admin.js?v=20260915-books1"></script>
+<script type="module" src="./admin.js?v=20260915-seasons1"></script>
 </body>
 </html>
