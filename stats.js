@@ -54,6 +54,10 @@ export function userTotalXp(state, uid) {
   return userRecords(state, uid).reduce((sum, r) => sum + Number(r.xp || 0), 0);
 }
 
+export function completedBooksCount(state, uid) {
+  return userRecords(state, uid).filter((r) => r.finished === true).length;
+}
+
 export function currentStreak(state, uid) {
   const set = new Set(userRecords(state, uid).filter((r) => Number(r.xp) > 0).map((r) => r.date));
   if (!set.size) return 0;
