@@ -17,6 +17,7 @@
     .finish-check{display:flex;align-items:center;gap:10px;margin:14px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025);cursor:pointer}
     .finish-check input{width:auto;margin:0;accent-color:var(--accent)}
     .finish-check span{font-size:13px}
+    .shelf-check{border-color:rgba(102,211,159,.28);background:rgba(102,211,159,.055)}
     .action-grid{align-items:stretch;margin-top:0}
     .action-grid>.card{height:100%}
     .stopwatch-card{display:flex;flex-direction:column}
@@ -27,6 +28,11 @@
     .stopwatch-progress>div{height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .4s ease}
     .stopwatch-markers{display:flex;justify-content:space-between;margin-top:6px;color:var(--muted);font-size:11px}
     .priority-note{margin-top:12px;color:var(--muted);font-size:12px;line-height:1.45}
+    .shelf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+    .shelf-item{display:flex;gap:12px;align-items:center;padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025)}
+    .shelf-item.me{border-color:rgba(102,211,159,.45);background:rgba(102,211,159,.07)}
+    .shelf-icon{font-size:23px}
+    .shelf-item b,.shelf-item small{display:block}.shelf-item small{margin-top:3px;color:var(--muted)}
     @media(max-width:760px){.action-grid{grid-template-columns:1fr}}
     @media(max-width:520px){.recovery-code-row{align-items:stretch}.recovery-code{width:100%;text-align:center}.recovery-code-row .btn{width:100%}.metrics.four{grid-template-columns:repeat(2,1fr)}.stopwatch-actions{grid-template-columns:1fr}.stopwatch-actions .full-row{grid-column:auto}}
   </style>
@@ -84,6 +90,7 @@
             </div>
             <label class="field"><span>Buchtitel</span><input id="bookInput" maxlength="80" placeholder="z. B. Tschick" required></label>
             <label class="field"><span>Seiten / Kapitel / Abschnitt</span><input id="sectionInput" maxlength="80" placeholder="z. B. S. 42–67 oder Kapitel 5" required></label>
+            <label class="finish-check shelf-check"><input id="shareShelfInput" type="checkbox"><span>👀 Dieses Buch freiwillig im Klassen-Bücherregal zeigen.</span></label>
             <label class="finish-check"><input id="finishedInput" type="checkbox"><span>📚 Ich habe dieses Buch heute beendet.</span></label>
             <button id="saveLogBtn" class="btn primary full" type="submit">Punkte eintragen</button>
           </form>
@@ -105,6 +112,14 @@
         </section>
       </section>
 
+      <section id="bookshelfCard" class="card">
+        <div class="section-head"><div><h3>📚 Was liest die Klasse gerade?</h3><p>Freiwilliges Klassen-Bücherregal · nur Nickname und Buchtitel</p></div><span id="bookshelfCount" class="badge">0 Bücher sichtbar</span></div>
+        <div id="bookshelfList" class="shelf-grid"></div>
+        <div class="actions" style="justify-content:flex-start;margin-top:14px"><button id="clearShelfBtn" class="btn ghost hidden" type="button">Mein Buch aus Regal entfernen</button></div>
+        <div id="shelfMessage" style="margin-top:10px"></div>
+        <p class="priority-note">Seiten/Kapitel, Lesezeit, XP und Eintrags-Uhrzeit werden hier nicht angezeigt.</p>
+      </section>
+
       <section id="recoveryCard" class="card hidden">
         <div class="section-head"><div><h3>Dein Wiederherstellungscode</h3><p>Für Gerätewechsel oder gelöschte Browserdaten</p></div><span class="badge">🔑 Zugang sichern</span></div>
         <div id="recoveryCodeBox">
@@ -117,23 +132,11 @@
 
       <section class="grid">
         <div class="stack">
-          <section class="card">
-            <div class="section-head"><div><h3>Deine Einträge</h3><p>Aktuelle Season</p></div></div>
-            <div id="history" class="history"></div>
-          </section>
+          <section class="card"><div class="section-head"><div><h3>Deine Einträge</h3><p>Aktuelle Season</p></div></div><div id="history" class="history"></div></section>
         </div>
         <div class="stack">
-          <section class="card">
-            <div class="section-head"><div><h3>Season-Klassenziel</h3><p>Alle XP der aktuellen Season zählen zusammen</p></div></div>
-            <div class="goal-row"><span id="goalText">0 / 540 XP</span><strong id="goalPercent">0 %</strong></div>
-            <div class="progress"><div id="goalBar"></div></div>
-            <div id="goalNote" class="notice ok" style="margin-top:14px">Gemeinsam Richtung Ziel.</div>
-          </section>
-          <section class="card">
-            <div class="section-head"><div><h3>Live-Rangliste</h3><p id="participantCount">0 Teilnehmer</p></div></div>
-            <div id="podium" class="podium"></div>
-            <div id="leaderboard" class="leaderboard"></div>
-          </section>
+          <section class="card"><div class="section-head"><div><h3>Season-Klassenziel</h3><p>Alle XP der aktuellen Season zählen zusammen</p></div></div><div class="goal-row"><span id="goalText">0 / 540 XP</span><strong id="goalPercent">0 %</strong></div><div class="progress"><div id="goalBar"></div></div><div id="goalNote" class="notice ok" style="margin-top:14px">Gemeinsam Richtung Ziel.</div></section>
+          <section class="card"><div class="section-head"><div><h3>Live-Rangliste</h3><p id="participantCount">0 Teilnehmer</p></div></div><div id="podium" class="podium"></div><div id="leaderboard" class="leaderboard"></div></section>
         </div>
       </section>
 
@@ -153,7 +156,7 @@
     </section>
   </div>
 
-  <script type="module" src="./student.js?v=20260915-motivation2"></script>
+  <script type="module" src="./student.js?v=20260916-privacy1"></script>
   <script type="module" src="./stopwatch.js?v=20260916-1"></script>
 </body>
 </html>
