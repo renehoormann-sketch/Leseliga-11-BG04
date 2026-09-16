@@ -9,6 +9,27 @@ function isHidden(state, uid) {
   return state.config?.hiddenStudents?.[uid] === true;
 }
 
+function seasonById(state, seasonId = null) {
+  return seasonId
+    ? (SEASON_PLAN.find((item) => item.id === seasonId) || getActiveSeason(state))
+    : getActiveSeason(state);
+}
+
+function hasPrivateDays(state, uid) {
+  return Object.prototype.hasOwnProperty.call(state.days || {}, uid);
+}
+
+function privateSeasonRecords(state, uid, season) {
+  return Object.entries(state.days?.[uid] || {})
+    .filter(([date]) => date >= season.start && date <= season.end)
+    .map(([date, entry]) => ({ uid, date, ...entry }));
+}
+
+function publicSeasonStats(state, uid, seasonId) {
+  const value = state.profiles?.[uid]?.publicStats?.[seasonId];
+  return value && typeof value === "object" ? value : null;
+}
+
 export function getActiveSeason(state) {
   const id = state.config?.activeSeasonId || "season1";
   return SEASON_PLAN.find((season) => season.id === id) || SEASON_PLAN[0];
@@ -21,9 +42,7 @@ export function getNextSeason(state) {
 }
 
 export function getSeasonRecords(state, seasonId = null) {
-  const season = seasonId
-    ? (SEASON_PLAN.find((item) => item.id === seasonId) || getActiveSeason(state))
-    : getActiveSeason(state);
+  const season = seasonById(state, seasonId);
   const records = [];
   Object.entries(state.days || {}).forEach(([uid, dates]) => {
     if (isHidden(state, uid)) return;
@@ -34,22 +53,23 @@ export function getSeasonRecords(state, seasonId = null) {
   return records;
 }
 
-// Bestehende Aufrufer behalten den Funktionsnamen; ausgewertet wird jetzt die aktive Season.
 export function getMonthRecords(state) {
   return getSeasonRecords(state);
 }
 
 export function computeLeaderboardForSeason(state, seasonId = null) {
-  const totals = {};
-  Object.entries(state.profiles || {}).forEach(([uid]) => {
-    if (!isHidden(state, uid)) totals[uid] = 0;
-  });
-  getSeasonRecords(state, seasonId).forEach((r) => {
-    totals[r.uid] = (totals[r.uid] || 0) + Number(r.xp || 0);
-  });
+  const season = seasonById(state, seasonId);
   return Object.entries(state.profiles || {})
     .filter(([uid]) => !isHidden(state, uid))
-    .map(([uid, profile]) => ({ uid, nickname: profile.nickname || "Ohne Namen", xp: totals[uid] || 0 }))
+    .map(([uid, profile]) => {
+      let xp = 0;
+      if (hasPrivateDays(state, uid)) {
+        xp = privateSeasonRecords(state, uid, season).reduce((sum, r) => sum + Number(r.xp || 0), 0);
+      } else {
+        xp = Number(publicSeasonStats(state, uid, season.id)?.xp || 0);
+      }
+      return { uid, nickname: profile.nickname || "Ohne Namen", xp };
+    })
     .sort((a, b) => b.xp - a.xp || a.nickname.localeCompare(b.nickname, "de"));
 }
 
@@ -72,12 +92,9 @@ export function totalClassXp(state) {
 }
 
 export function userRecordsForSeason(state, uid, seasonId = null) {
-  const season = seasonId
-    ? (SEASON_PLAN.find((item) => item.id === seasonId) || getActiveSeason(state))
-    : getActiveSeason(state);
-  return Object.entries(state.days?.[uid] || {})
-    .filter(([date]) => date >= season.start && date <= season.end)
-    .map(([date, entry]) => ({ date, ...entry }))
+  const season = seasonById(state, seasonId);
+  return privateSeasonRecords(state, uid, season)
+    .map(({ uid: _uid, ...record }) => record)
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
@@ -86,11 +103,15 @@ export function userRecords(state, uid) {
 }
 
 export function userTotalXp(state, uid) {
-  return userRecords(state, uid).reduce((sum, r) => sum + Number(r.xp || 0), 0);
+  const season = getActiveSeason(state);
+  if (hasPrivateDays(state, uid)) return userRecords(state, uid).reduce((sum, r) => sum + Number(r.xp || 0), 0);
+  return Number(publicSeasonStats(state, uid, season.id)?.xp || 0);
 }
 
 export function completedBooksCountForSeason(state, uid, seasonId = null) {
-  return userRecordsForSeason(state, uid, seasonId).filter((r) => r.finished === true).length;
+  const season = seasonById(state, seasonId);
+  if (hasPrivateDays(state, uid)) return userRecordsForSeason(state, uid, season.id).filter((r) => r.finished === true).length;
+  return Number(publicSeasonStats(state, uid, season.id)?.books || 0);
 }
 
 export function completedBooksCount(state, uid) {
@@ -114,6 +135,11 @@ export function currentStreak(state, uid) {
   return count;
 }
 
+export function getPublicSeasonStats(state, uid, seasonId = null) {
+  const season = seasonById(state, seasonId);
+  return publicSeasonStats(state, uid, season.id) || { xp: 0, books: 0, readingDays: 0, longestStreak: 0, bestWeekXp: 0, weeks: {} };
+}
+
 export function activeSeasonMatchesToday(state) {
   const season = getActiveSeason(state);
   const d = new Date();
@@ -127,7 +153,6 @@ export function getSeasonGoal(state) {
   return Number.isFinite(custom) && custom > 0 ? custom : season.goalXp;
 }
 
-// Kompatibilität mit der bisherigen Schülerlogik: activeMonth enthält künftig den Startmonat der Season.
 export function activeMonthMatchesToday(activeMonth) {
   const season = SEASON_PLAN.find((item) => item.start.startsWith(activeMonth));
   if (!season) return false;
