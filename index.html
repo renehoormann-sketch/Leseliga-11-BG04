@@ -17,7 +17,18 @@
     .finish-check{display:flex;align-items:center;gap:10px;margin:14px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025);cursor:pointer}
     .finish-check input{width:auto;margin:0;accent-color:var(--accent)}
     .finish-check span{font-size:13px}
-    @media(max-width:520px){.recovery-code-row{align-items:stretch}.recovery-code{width:100%;text-align:center}.recovery-code-row .btn{width:100%}.metrics.four{grid-template-columns:repeat(2,1fr)}}
+    .action-grid{align-items:stretch;margin-top:0}
+    .action-grid>.card{height:100%}
+    .stopwatch-card{display:flex;flex-direction:column}
+    .stopwatch-display{font-variant-numeric:tabular-nums;font-size:clamp(42px,8vw,72px);line-height:1;font-weight:900;letter-spacing:.03em;text-align:center;margin:22px 0 18px}
+    .stopwatch-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .stopwatch-actions .full-row{grid-column:1/-1}
+    .stopwatch-progress{height:12px;margin-top:18px;position:relative;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.08)}
+    .stopwatch-progress>div{height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .4s ease}
+    .stopwatch-markers{display:flex;justify-content:space-between;margin-top:6px;color:var(--muted);font-size:11px}
+    .priority-note{margin-top:12px;color:var(--muted);font-size:12px;line-height:1.45}
+    @media(max-width:760px){.action-grid{grid-template-columns:1fr}}
+    @media(max-width:520px){.recovery-code-row{align-items:stretch}.recovery-code{width:100%;text-align:center}.recovery-code-row .btn{width:100%}.metrics.four{grid-template-columns:repeat(2,1fr)}.stopwatch-actions{grid-template-columns:1fr}.stopwatch-actions .full-row{grid-column:auto}}
   </style>
 </head>
 <body>
@@ -26,22 +37,123 @@
       <div class="brand"><div class="brand-mark">📚</div><div><h1 id="brandTitle">LESELIGA 11</h1><p id="seasonText">Lesen. Punkte sammeln. Dranbleiben.</p></div></div>
       <div class="actions"><span id="modeBadge" class="badge">…</span><a class="btn ghost" href="./presentation.html"><span class="label-hide">Präsentation</span> ↗</a></div>
     </header>
+
     <section id="loadingView" class="card"><div class="empty">Leseliga wird geladen …</div></section>
+
     <section id="setupView" class="card hero hidden">
-      <div class="eyebrow">Dein Einstieg</div><h2>Wähle deinen Spielernamen.</h2><p class="lead">Keine Klarnamen nötig. Dein Nickname erscheint in der Rangliste. Danach kannst du deine Lesepunkte selbst eintragen.</p>
-      <form id="nicknameForm" style="margin-top:22px;max-width:520px"><label class="field"><span>Nickname</span><input id="nicknameInput" maxlength="24" minlength="2" placeholder="z. B. BookDragon" required></label><button class="btn primary" type="submit">Leseliga starten</button></form><div id="setupMessage" style="margin-top:14px"></div>
-      <div id="recoverSetupBox" class="recovery-entry hidden"><div><b>Schon bei der Leseliga dabei?</b><p>Wenn du das Gerät oder den Browser gewechselt hast, kannst du deinen bisherigen Stand mit deinem Wiederherstellungscode zurückholen.</p></div><button id="showRecoveryBtn" class="btn ghost" type="button">Konto wiederherstellen</button><form id="recoveryForm" class="hidden recovery-form"><label class="field"><span>Wiederherstellungscode</span><input id="recoveryCodeInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="LIGA-XXXX-XXXX-XXXX-XXXX" required></label><button class="btn secondary" type="submit">Bisherigen Stand laden</button><div id="recoveryMessage" style="margin-top:12px"></div></form></div>
+      <div class="eyebrow">Dein Einstieg</div>
+      <h2>Wähle deinen Spielernamen.</h2>
+      <p class="lead">Keine Klarnamen nötig. Dein Nickname erscheint in der Rangliste. Danach kannst du deine Lesepunkte selbst eintragen.</p>
+      <form id="nicknameForm" style="margin-top:22px;max-width:520px">
+        <label class="field"><span>Nickname</span><input id="nicknameInput" maxlength="24" minlength="2" placeholder="z. B. BookDragon" required></label>
+        <button class="btn primary" type="submit">Leseliga starten</button>
+      </form>
+      <div id="setupMessage" style="margin-top:14px"></div>
+      <div id="recoverSetupBox" class="recovery-entry hidden">
+        <div><b>Schon bei der Leseliga dabei?</b><p>Wenn du das Gerät oder den Browser gewechselt hast, kannst du deinen bisherigen Stand mit deinem Wiederherstellungscode zurückholen.</p></div>
+        <button id="showRecoveryBtn" class="btn ghost" type="button">Konto wiederherstellen</button>
+        <form id="recoveryForm" class="hidden recovery-form">
+          <label class="field"><span>Wiederherstellungscode</span><input id="recoveryCodeInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="LIGA-XXXX-XXXX-XXXX-XXXX" required></label>
+          <button class="btn secondary" type="submit">Bisherigen Stand laden</button>
+          <div id="recoveryMessage" style="margin-top:12px"></div>
+        </form>
+      </div>
     </section>
+
     <div id="appView" class="stack hidden">
-      <section class="card hero"><div class="eyebrow" id="activeMonthLabel">Aktuelle Season</div><h2>Hi, <span id="helloName">…</span>.</h2><p class="lead">20 Minuten lesen = 1 XP. Maximal 2 XP pro Tag zählen für die Rangliste.</p><div class="metrics four"><div class="metric"><b id="myXp">0</b><span>deine XP</span></div><div class="metric"><b id="myRank">–</b><span>dein Platz</span></div><div class="metric"><b id="myStreak">0</b><span>Tage Streak</span></div><div class="metric"><b id="myBooks">0</b><span>Bücher beendet</span></div></div></section>
-      <section id="recoveryCard" class="card hidden"><div class="section-head"><div><h3>Dein Wiederherstellungscode</h3><p>Für Gerätewechsel oder gelöschte Browserdaten</p></div><span class="badge">🔑 Zugang sichern</span></div><div id="recoveryCodeBox"><p class="recovery-help">Notiere oder fotografiere diesen Code und bewahre ihn sicher auf. Wer den Code kennt, kann deinen Leseliga-Stand auf einem anderen Gerät wiederherstellen.</p><div class="recovery-code-row"><code id="recoveryCode" class="recovery-code">–</code><button id="copyRecoveryBtn" class="btn secondary" type="button">Code kopieren</button></div><div id="recoveryCopyMessage" style="margin-top:10px"></div></div><div id="recoveryUnavailable" class="notice hidden"></div></section>
-      <section class="grid"><div class="stack"><section class="card"><div class="section-head"><div><h3>Heute gelesen?</h3><p id="todayHint">Trage deine heutige Lesezeit ein.</p></div><span id="todayStatus" class="badge">0 / 2 XP</span></div><div id="monthMismatch" class="notice hidden" style="margin-bottom:14px"></div><form id="logForm"><div class="xp-picker"><div class="xp-option"><input type="radio" name="xp" id="xp1" value="1" checked><label for="xp1"><b>+1 XP</b><span>mind. 20 Minuten</span></label></div><div class="xp-option"><input type="radio" name="xp" id="xp2" value="2"><label for="xp2"><b>+2 XP</b><span>mind. 40 Minuten</span></label></div></div><label class="field"><span>Buchtitel</span><input id="bookInput" maxlength="80" placeholder="z. B. Tschick" required></label><label class="field"><span>Seiten / Kapitel / Abschnitt</span><input id="sectionInput" maxlength="80" placeholder="z. B. S. 42–67 oder Kapitel 5" required></label><label class="finish-check"><input id="finishedInput" type="checkbox"><span>📚 Ich habe dieses Buch heute beendet.</span></label><button id="saveLogBtn" class="btn primary full" type="submit">Punkte eintragen</button></form><div id="logMessage" style="margin-top:12px"></div></section><section class="card"><div class="section-head"><div><h3>Deine Einträge</h3><p>Aktuelle Season</p></div></div><div id="history" class="history"></div></section></div>
-      <div class="stack"><section class="card"><div class="section-head"><div><h3>Season-Klassenziel</h3><p>Alle XP der aktuellen Season zählen zusammen</p></div></div><div class="goal-row"><span id="goalText">0 / 540 XP</span><strong id="goalPercent">0 %</strong></div><div class="progress"><div id="goalBar"></div></div><div id="goalNote" class="notice ok" style="margin-top:14px">Gemeinsam Richtung Ziel.</div></section><section class="card"><div class="section-head"><div><h3>Live-Rangliste</h3><p id="participantCount">0 Teilnehmer</p></div></div><div id="podium" class="podium"></div><div id="leaderboard" class="leaderboard"></div></section></div></section>
+      <section class="card hero">
+        <div class="eyebrow" id="activeMonthLabel">Aktuelle Season</div>
+        <h2>Hi, <span id="helloName">…</span>.</h2>
+        <p class="lead">20 Minuten lesen = 1 XP. Maximal 2 XP pro Tag zählen für die Rangliste.</p>
+        <div class="metrics four">
+          <div class="metric"><b id="myXp">0</b><span>deine XP</span></div>
+          <div class="metric"><b id="myRank">–</b><span>dein Platz</span></div>
+          <div class="metric"><b id="myStreak">0</b><span>Tage Streak</span></div>
+          <div class="metric"><b id="myBooks">0</b><span>Bücher beendet</span></div>
+        </div>
+      </section>
+
+      <section class="grid action-grid" aria-label="Lesen und Punkte eintragen">
+        <section class="card" id="entryCard">
+          <div class="section-head"><div><h3>1. Punkte eintragen</h3><p id="todayHint">Trage deine heutige Lesezeit ein.</p></div><span id="todayStatus" class="badge">0 / 2 XP</span></div>
+          <div id="monthMismatch" class="notice hidden" style="margin-bottom:14px"></div>
+          <form id="logForm">
+            <div class="xp-picker">
+              <div class="xp-option"><input type="radio" name="xp" id="xp1" value="1" checked><label for="xp1"><b>+1 XP</b><span>mind. 20 Minuten</span></label></div>
+              <div class="xp-option"><input type="radio" name="xp" id="xp2" value="2"><label for="xp2"><b>+2 XP</b><span>mind. 40 Minuten</span></label></div>
+            </div>
+            <label class="field"><span>Buchtitel</span><input id="bookInput" maxlength="80" placeholder="z. B. Tschick" required></label>
+            <label class="field"><span>Seiten / Kapitel / Abschnitt</span><input id="sectionInput" maxlength="80" placeholder="z. B. S. 42–67 oder Kapitel 5" required></label>
+            <label class="finish-check"><input id="finishedInput" type="checkbox"><span>📚 Ich habe dieses Buch heute beendet.</span></label>
+            <button id="saveLogBtn" class="btn primary full" type="submit">Punkte eintragen</button>
+          </form>
+          <div id="logMessage" style="margin-top:12px"></div>
+        </section>
+
+        <section class="card stopwatch-card" id="stopwatchCard">
+          <div class="section-head"><div><h3>2. Optionale Stoppuhr</h3><p>Wenn du deine Lesezeit direkt messen möchtest</p></div><span id="stopwatchBadge" class="badge">bereit</span></div>
+          <div id="stopwatchTime" class="stopwatch-display" aria-live="polite">00:00:00</div>
+          <div class="stopwatch-actions">
+            <button id="stopwatchStartBtn" class="btn primary" type="button">Start</button>
+            <button id="stopwatchResetBtn" class="btn ghost" type="button" disabled>Zurücksetzen</button>
+            <button id="stopwatchUseBtn" class="btn secondary full-row" type="button" disabled>Zeit für Punkte-Eintrag übernehmen</button>
+          </div>
+          <div class="stopwatch-progress"><div id="stopwatchFill"></div></div>
+          <div class="stopwatch-markers"><span>Start</span><span>20 min · 1 XP</span><span>40 min · 2 XP</span></div>
+          <div id="stopwatchNote" class="notice" style="margin-top:14px">Noch 20:00 bis 1 XP.</div>
+          <p class="priority-note">Die Stoppuhr ist nur eine Hilfe. Sie speichert keine XP automatisch und funktioniert nur auf diesem Gerät bzw. in diesem Browser.</p>
+        </section>
+      </section>
+
+      <section id="recoveryCard" class="card hidden">
+        <div class="section-head"><div><h3>Dein Wiederherstellungscode</h3><p>Für Gerätewechsel oder gelöschte Browserdaten</p></div><span class="badge">🔑 Zugang sichern</span></div>
+        <div id="recoveryCodeBox">
+          <p class="recovery-help">Notiere oder fotografiere diesen Code und bewahre ihn sicher auf. Wer den Code kennt, kann deinen Leseliga-Stand auf einem anderen Gerät wiederherstellen.</p>
+          <div class="recovery-code-row"><code id="recoveryCode" class="recovery-code">–</code><button id="copyRecoveryBtn" class="btn secondary" type="button">Code kopieren</button></div>
+          <div id="recoveryCopyMessage" style="margin-top:10px"></div>
+        </div>
+        <div id="recoveryUnavailable" class="notice hidden"></div>
+      </section>
+
+      <section class="grid">
+        <div class="stack">
+          <section class="card">
+            <div class="section-head"><div><h3>Deine Einträge</h3><p>Aktuelle Season</p></div></div>
+            <div id="history" class="history"></div>
+          </section>
+        </div>
+        <div class="stack">
+          <section class="card">
+            <div class="section-head"><div><h3>Season-Klassenziel</h3><p>Alle XP der aktuellen Season zählen zusammen</p></div></div>
+            <div class="goal-row"><span id="goalText">0 / 540 XP</span><strong id="goalPercent">0 %</strong></div>
+            <div class="progress"><div id="goalBar"></div></div>
+            <div id="goalNote" class="notice ok" style="margin-top:14px">Gemeinsam Richtung Ziel.</div>
+          </section>
+          <section class="card">
+            <div class="section-head"><div><h3>Live-Rangliste</h3><p id="participantCount">0 Teilnehmer</p></div></div>
+            <div id="podium" class="podium"></div>
+            <div id="leaderboard" class="leaderboard"></div>
+          </section>
+        </div>
+      </section>
+
       <section class="card"><div class="section-head"><div><h3>Regeln in 20 Sekunden</h3><p>Niedrigschwellig & fair</p></div></div><div class="notice">📖 20 Minuten = 1 XP · 40+ Minuten = 2 XP · maximal 2 XP pro Kalendertag · Buch, E-Book, Manga und Graphic Novel zählen · Pflichtlektüre nur, wenn die Klasse das gemeinsam so festlegt · fair eintragen.</div></section>
       <div class="footer"><button id="changeProfileBtn" class="btn ghost">Nickname ändern / Testprofil wechseln</button></div>
     </div>
   </main>
-  <div id="recoveryModal" class="modal-backdrop hidden"><section class="card modal"><div class="eyebrow">Wichtig</div><h2 style="margin-top:0">Sichere deinen Zugang.</h2><p class="lead">Dieser Code verbindet dich später wieder mit deinem Nickname und deinen bisherigen XP, falls du das Gerät oder den Browser wechselst.</p><div class="recovery-code-row" style="margin-top:20px"><code id="modalRecoveryCode" class="recovery-code">–</code><button id="copyModalRecoveryBtn" class="btn secondary" type="button">Kopieren</button></div><div id="modalRecoveryMessage" style="margin-top:10px"></div><div class="notice" style="margin-top:16px">🔐 Teile den Code nicht mit anderen. Wer ihn kennt, kann deinen Leseliga-Zugang wiederherstellen.</div><button id="recoveryModalDone" class="btn primary full" type="button" style="margin-top:16px">Ich habe den Code gesichert</button></section></div>
+
+  <div id="recoveryModal" class="modal-backdrop hidden">
+    <section class="card modal">
+      <div class="eyebrow">Wichtig</div><h2 style="margin-top:0">Sichere deinen Zugang.</h2>
+      <p class="lead">Dieser Code verbindet dich später wieder mit deinem Nickname und deinen bisherigen XP, falls du das Gerät oder den Browser wechselst.</p>
+      <div class="recovery-code-row" style="margin-top:20px"><code id="modalRecoveryCode" class="recovery-code">–</code><button id="copyModalRecoveryBtn" class="btn secondary" type="button">Kopieren</button></div>
+      <div id="modalRecoveryMessage" style="margin-top:10px"></div>
+      <div class="notice" style="margin-top:16px">🔐 Teile den Code nicht mit anderen. Wer ihn kennt, kann deinen Leseliga-Zugang wiederherstellen.</div>
+      <button id="recoveryModalDone" class="btn primary full" type="button" style="margin-top:16px">Ich habe den Code gesichert</button>
+    </section>
+  </div>
+
   <script type="module" src="./student.js?v=20260915-motivation2"></script>
+  <script type="module" src="./stopwatch.js?v=20260916-1"></script>
 </body>
 </html>
