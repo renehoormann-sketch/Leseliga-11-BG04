@@ -1,0 +1,26 @@
+# Lokale Geheimnisse / Umgebungsvariablen
+.env
+.env.*
+!.env.example
+
+# Private Schlüssel und Zertifikate
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Firebase / Google Service Accounts
+*service-account*.json
+*service_account*.json
+*firebase-adminsdk*.json
+*google-credentials*.json
+
+# Allgemeine Secret-Dateien
+secrets.json
+secrets.*.json
+credentials.json
+credentials.*.json
+
+# Lokale Systemdateien
+.DS_Store
+Thumbs.db
