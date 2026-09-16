@@ -9,7 +9,7 @@ const [{ getApps }, authMod, dbMod] = await Promise.all([
 let days = {};
 let unsubscribeDays = null;
 
-function formatEntryTime(value) {
+function formatTime(value) {
   const timestamp = Number(value);
   if (!Number.isFinite(timestamp) || timestamp <= 0) return "–";
   return `${new Intl.DateTimeFormat("de-DE", {
@@ -25,8 +25,21 @@ function ensureTimeHeader() {
   if (!row || row.querySelector("[data-entry-time-header]")) return;
   const th = document.createElement("th");
   th.dataset.entryTimeHeader = "true";
-  th.textContent = "Eingetragen um";
+  th.textContent = "Erstellt / geändert";
   row.insertBefore(th, row.lastElementChild);
+}
+
+function metadataText(entry) {
+  if (!entry) return "–";
+  const created = Number(entry.createdAt || entry.updatedAt || 0);
+  const updated = Number(entry.updatedAt || 0);
+  const studentEdits = Number(entry.editCount || 0);
+  const teacherEdits = Number(entry.teacherEditCount || 0);
+  const parts = [`${entry.createdAt ? "Erstellt" : "Gespeichert"}: ${formatTime(created)}`];
+  if (entry.createdAt && updated && Math.abs(updated-created) > 1000) parts.push(`zuletzt: ${formatTime(updated)}`);
+  if (studentEdits > 0) parts.push(`${studentEdits}× Schüleränderung`);
+  if (teacherEdits > 0 || entry.lastEditedBy === "teacher") parts.push(`Lehrkraftkorrektur${teacherEdits>1?` (${teacherEdits}×)`:""}`);
+  return parts.join(" · ");
 }
 
 function enrichActivityTable() {
@@ -50,7 +63,7 @@ function enrichActivityTable() {
     }
 
     const entry = days?.[deleteBtn.dataset.uid]?.[deleteBtn.dataset.date];
-    const text = formatEntryTime(entry?.updatedAt);
+    const text = metadataText(entry);
     if (cell.textContent !== text) cell.textContent = text;
   });
 }
