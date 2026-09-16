@@ -43,7 +43,7 @@
         ".read": "auth != null && (auth.uid == $studentId || root.child('claims').child($studentId).child(auth.uid).exists() || root.child('admins').child(auth.uid).val() == true)",
         "$date": {
           ".write": "auth != null && (auth.uid == $studentId || root.child('claims').child($studentId).child(auth.uid).exists() || root.child('admins').child(auth.uid).val() == true)",
-          ".validate": "newData.hasChildren(['xp','book','section','updatedAt']) && newData.child('xp').isNumber() && newData.child('xp').val() >= 1 && newData.child('xp').val() <= 2 && newData.child('book').isString() && newData.child('book').val().length >= 1 && newData.child('book').val().length <= 80 && newData.child('section').isString() && newData.child('section').val().length >= 1 && newData.child('section').val().length <= 80 && newData.child('updatedAt').isNumber() && (!newData.child('finished').exists() || newData.child('finished').isBoolean()) && (!newData.child('rating').exists() || (newData.child('rating').isNumber() && newData.child('rating').val() >= 0 && newData.child('rating').val() <= 5))"
+          ".validate": "newData.hasChildren(['xp','book','section','updatedAt']) && newData.child('xp').isNumber() && newData.child('xp').val() >= 1 && newData.child('xp').val() <= 2 && newData.child('book').isString() && newData.child('book').val().length >= 1 && newData.child('book').val().length <= 80 && newData.child('section').isString() && newData.child('section').val().length >= 1 && newData.child('section').val().length <= 80 && newData.child('updatedAt').isNumber() && (!newData.child('finished').exists() || newData.child('finished').isBoolean()) && (!newData.child('rating').exists() || (newData.child('rating').isNumber() && newData.child('rating').val() >= 0 && newData.child('rating').val() <= 5)) && (!newData.child('createdAt').exists() || newData.child('createdAt').isNumber()) && (!newData.child('editCount').exists() || (newData.child('editCount').isNumber() && newData.child('editCount').val() >= 0)) && (!newData.child('teacherEditCount').exists() || (newData.child('teacherEditCount').isNumber() && newData.child('teacherEditCount').val() >= 0)) && (!newData.child('createdBy').exists() || newData.child('createdBy').val() == 'student' || newData.child('createdBy').val() == 'teacher') && (!newData.child('lastEditedBy').exists() || newData.child('lastEditedBy').val() == 'student' || newData.child('lastEditedBy').val() == 'teacher')"
         }
       }
     },
@@ -54,6 +54,15 @@
         "$date": {
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || ((auth.uid == $studentId || root.child('claims').child($studentId).child(auth.uid).exists()) && newData.exists() && root.child('days').child($studentId).child($date).exists() && newData.child('xp').val() == root.child('days').child($studentId).child($date).child('xp').val() && newData.child('finished').val() == (root.child('days').child($studentId).child($date).child('finished').val() == true)))",
           ".validate": "newData.hasChildren(['xp','finished']) && newData.child('xp').isNumber() && newData.child('xp').val() >= 1 && newData.child('xp').val() <= 2 && newData.child('finished').isBoolean()"
+        }
+      }
+    },
+    "adminReviews": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
+      "$seasonId": {
+        "$studentId": {
+          ".validate": "!newData.exists() || (newData.hasChildren(['status','reviewedAt']) && (newData.child('status').val() == 'cleared' || newData.child('status').val() == 'watch') && newData.child('reviewedAt').isNumber())"
         }
       }
     },
