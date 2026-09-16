@@ -7,28 +7,10 @@ const STUDENT_ID_KEY="leseliga_student_id_v1";
 const RECOVERY_CODE_KEY="leseliga_recovery_code_v1";
 const RECOVERY_ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-function normalizeRecoveryCode(value=""){
-  const compact=String(value).toUpperCase().replace(/[^A-Z0-9]/g,"");
-  if(!compact.startsWith("LIGA")||compact.length!==20)return null;
-  return compact;
-}
-function formatRecoveryCode(compact){
-  const normalized=normalizeRecoveryCode(compact);
-  if(!normalized)return "";
-  const body=normalized.slice(4);
-  return `LIGA-${body.slice(0,4)}-${body.slice(4,8)}-${body.slice(8,12)}-${body.slice(12,16)}`;
-}
-function makeRecoveryCode(){
-  const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);let body="";
-  for(const byte of bytes)body+=RECOVERY_ALPHABET[byte%RECOVERY_ALPHABET.length];
-  return formatRecoveryCode(`LIGA${body}`);
-}
-async function hashRecoveryCode(value){
-  const compact=normalizeRecoveryCode(value);
-  if(!compact)throw new Error("Der Wiederherstellungscode hat nicht das richtige Format.");
-  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(compact));
-  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
-}
+function normalizeRecoveryCode(value=""){const compact=String(value).toUpperCase().replace(/[^A-Z0-9]/g,"");return compact.startsWith("LIGA")&&compact.length===20?compact:null;}
+function formatRecoveryCode(compact){const normalized=normalizeRecoveryCode(compact);if(!normalized)return "";const body=normalized.slice(4);return `LIGA-${body.slice(0,4)}-${body.slice(4,8)}-${body.slice(8,12)}-${body.slice(12,16)}`;}
+function makeRecoveryCode(){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);let body="";for(const byte of bytes)body+=RECOVERY_ALPHABET[byte%RECOVERY_ALPHABET.length];return formatRecoveryCode(`LIGA${body}`);}
+async function hashRecoveryCode(value){const compact=normalizeRecoveryCode(value);if(!compact)throw new Error("Der Wiederherstellungscode hat nicht das richtige Format.");const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(compact));return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");}
 
 async function createFirebaseStudentService(){
   const [{initializeApp,getApps,getApp},authMod,dbMod]=await Promise.all([
@@ -36,131 +18,26 @@ async function createFirebaseStudentService(){
     import(`https://www.gstatic.com/firebasejs/${SDK_VERSION}/firebase-auth.js`),
     import(`https://www.gstatic.com/firebasejs/${SDK_VERSION}/firebase-database.js`)
   ]);
-  const app=getApps().length?getApp():initializeApp(FIREBASE_CONFIG);
-  const auth=authMod.getAuth(app),db=dbMod.getDatabase(app);
-
-  async function ensureStudent(){
-    if(auth.currentUser)return auth.currentUser;
-    return (await authMod.signInAnonymously(auth)).user;
-  }
-  async function createUniqueRecovery(studentId){
-    for(let attempt=0;attempt<8;attempt+=1){
-      const code=makeRecoveryCode(),hash=await hashRecoveryCode(code),ref=dbMod.ref(db,`recovery/${hash}`),snap=await dbMod.get(ref);
-      if(snap.exists())continue;
-      await dbMod.set(ref,studentId);
-      return {code,hash};
-    }
-    throw new Error("Es konnte kein eindeutiger Wiederherstellungscode erzeugt werden.");
-  }
-  async function rebuildPublicProfile(studentId,options={}){
-    const daysSnap=await dbMod.get(dbMod.ref(db,`days/${studentId}`));
-    const days=daysSnap.val()||{};
-    const patch={publicStats:buildPublicStats(days),publicRatings:buildPublicRatings(days)};
-    if(options.clearBook===true)patch.publicBook=null;
-    else if(options.publicBook)patch.publicBook={title:String(options.publicBook).trim(),updatedAt:dbMod.serverTimestamp()};
-    await dbMod.update(dbMod.ref(db,`profiles/${studentId}`),patch);
-  }
+  const app=getApps().length?getApp():initializeApp(FIREBASE_CONFIG),auth=authMod.getAuth(app),db=dbMod.getDatabase(app);
+  async function ensureStudent(){if(auth.currentUser)return auth.currentUser;return (await authMod.signInAnonymously(auth)).user;}
+  async function createUniqueRecovery(studentId){for(let attempt=0;attempt<8;attempt+=1){const code=makeRecoveryCode(),hash=await hashRecoveryCode(code),ref=dbMod.ref(db,`recovery/${hash}`),snap=await dbMod.get(ref);if(snap.exists())continue;await dbMod.set(ref,studentId);return {code,hash};}throw new Error("Es konnte kein eindeutiger Wiederherstellungscode erzeugt werden.");}
+  async function syncPublicDays(studentId,days){const values={};Object.entries(days||{}).forEach(([date,entry])=>{values[date]={xp:Number(entry?.xp||0),finished:entry?.finished===true};});if(Object.keys(values).length)await dbMod.update(dbMod.ref(db,`publicDays/${studentId}`),values);return true;}
+  async function rebuildPublicProfile(studentId,options={}){const daysSnap=await dbMod.get(dbMod.ref(db,`days/${studentId}`)),days=daysSnap.val()||{};let publicDaysOk=false;try{publicDaysOk=await syncPublicDays(studentId,days);}catch{publicDaysOk=false;}const patch={publicRatings:buildPublicRatings(days)};if(!publicDaysOk)patch.publicStats=buildPublicStats(days);if(options.clearBook===true)patch.publicBook=null;else if(options.publicBook)patch.publicBook={title:String(options.publicBook).trim(),updatedAt:dbMod.serverTimestamp()};await dbMod.update(dbMod.ref(db,`profiles/${studentId}`),patch);}
 
   return {
     mode:"firebase",
-    async initStudentSession(){
-      const user=await ensureStudent();
-      let studentId=localStorage.getItem(STUDENT_ID_KEY)||user.uid;
-      if(studentId!==user.uid){
-        try{
-          const claim=await dbMod.get(dbMod.ref(db,`claims/${studentId}/${user.uid}`));
-          if(!claim.exists())throw new Error("missing claim");
-        }catch{
-          localStorage.removeItem(STUDENT_ID_KEY);localStorage.removeItem(RECOVERY_CODE_KEY);studentId=user.uid;
-        }
-      }
-      localStorage.setItem(STUDENT_ID_KEY,studentId);
-      return {uid:user.uid,studentId,isAnonymous:user.isAnonymous};
-    },
-    async getProfile(studentId){
-      const snap=await dbMod.get(dbMod.ref(db,`profiles/${studentId}`));
-      return snap.exists()?snap.val():null;
-    },
-    async saveProfile(studentId,nickname){
-      const ref=dbMod.ref(db,`profiles/${studentId}`),snap=await dbMod.get(ref);
-      if(snap.exists()){
-        await dbMod.update(ref,{nickname:nickname.trim()});
-        return {...snap.val(),nickname:nickname.trim()};
-      }
-      const profile={nickname:nickname.trim(),createdAt:dbMod.serverTimestamp()};
-      await dbMod.set(ref,profile);
-      return profile;
-    },
-    async syncOwnPublicProfile(studentId){
-      await rebuildPublicProfile(studentId);
-    },
-    async savePublicBook(studentId,title){
-      if(title&&String(title).trim())await dbMod.set(dbMod.ref(db,`profiles/${studentId}/publicBook`),{title:String(title).trim(),updatedAt:dbMod.serverTimestamp()});
-      else await dbMod.remove(dbMod.ref(db,`profiles/${studentId}/publicBook`));
-    },
-    async ensureRecoveryCode(studentId){
-      const user=await ensureStudent(),activeRef=dbMod.ref(db,`recoveryByStudent/${studentId}`),localCode=localStorage.getItem(RECOVERY_CODE_KEY);
-      try{
-        const activeSnap=await dbMod.get(activeRef),activeHash=activeSnap.exists()?activeSnap.val():null;
-        if(localCode){
-          const localHash=await hashRecoveryCode(localCode);
-          if(activeHash===localHash)return {code:formatRecoveryCode(localCode),isNew:false};
-          if(!activeHash&&studentId===user.uid){
-            const mappingRef=dbMod.ref(db,`recovery/${localHash}`),mappingSnap=await dbMod.get(mappingRef);
-            if(!mappingSnap.exists())await dbMod.set(mappingRef,studentId);
-            else if(mappingSnap.val()!==studentId)throw new Error("Code-Kollision");
-            await dbMod.set(activeRef,localHash);
-            return {code:formatRecoveryCode(localCode),isNew:false};
-          }
-          localStorage.removeItem(RECOVERY_CODE_KEY);
-        }
-        if(activeHash||studentId!==user.uid)return {code:null,isNew:false,unavailable:true};
-        const created=await createUniqueRecovery(studentId);
-        await dbMod.set(activeRef,created.hash);localStorage.setItem(RECOVERY_CODE_KEY,created.code);
-        return {code:created.code,isNew:true};
-      }catch(err){return {code:localCode?formatRecoveryCode(localCode):null,isNew:false,pendingRules:true,error:err};}
-    },
-    async recoverWithCode(value){
-      const user=await ensureStudent(),code=formatRecoveryCode(value);
-      if(!code)throw new Error("Bitte einen vollständigen Code im Format LIGA-XXXX-XXXX-XXXX-XXXX eingeben.");
-      const hash=await hashRecoveryCode(code);let mappingSnap;
-      try{mappingSnap=await dbMod.get(dbMod.ref(db,`recovery/${hash}`));}catch{throw new Error("Die Wiederherstellung ist in Firebase noch nicht freigeschaltet.");}
-      if(!mappingSnap.exists())throw new Error("Dieser Wiederherstellungscode wurde nicht gefunden.");
-      const studentId=mappingSnap.val();
-      if(studentId!==user.uid){
-        const claimRef=dbMod.ref(db,`claims/${studentId}/${user.uid}`),claimSnap=await dbMod.get(claimRef);
-        if(!claimSnap.exists()){
-          try{await dbMod.set(claimRef,hash);}catch{throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");}
-        }
-      }else{
-        const activeSnap=await dbMod.get(dbMod.ref(db,`recoveryByStudent/${studentId}`));
-        if(!activeSnap.exists()||activeSnap.val()!==hash)throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");
-      }
-      localStorage.setItem(STUDENT_ID_KEY,studentId);localStorage.setItem(RECOVERY_CODE_KEY,code);
-      return {uid:user.uid,studentId,isAnonymous:user.isAnonymous};
-    },
-    subscribeState(callback){
-      const sid=localStorage.getItem(STUDENT_ID_KEY)||auth.currentUser?.uid;
-      const cache={config:null,profiles:null,days:null};
-      const emit=()=>{if(cache.config&&cache.profiles&&cache.days)callback(JSON.parse(JSON.stringify(cache)));};
-      const unsubs=[
-        dbMod.onValue(dbMod.ref(db,"config"),s=>{cache.config=s.val()||{};emit();}),
-        dbMod.onValue(dbMod.ref(db,"profiles"),s=>{cache.profiles=s.val()||{};emit();}),
-        dbMod.onValue(dbMod.ref(db,`days/${sid}`),s=>{cache.days={[sid]:s.val()||{}};emit();})
-      ];
-      return ()=>unsubs.forEach(u=>u());
-    },
-    async saveToday(studentId,entry,options={}){
-      await dbMod.set(dbMod.ref(db,`days/${studentId}/${dateUtils.yyyyMmDd()}`),{...entry,updatedAt:dbMod.serverTimestamp()});
-      await rebuildPublicProfile(studentId,entry.finished===true||options.shareBook===false?{clearBook:true}:{publicBook:options.shareBook===true?entry.book:null});
-    },
-    async resetLocalStudent(){
-      localStorage.removeItem(STUDENT_ID_KEY);localStorage.removeItem(RECOVERY_CODE_KEY);await authMod.signOut(auth);location.reload();
-    }
+    async initStudentSession(){const user=await ensureStudent();let studentId=localStorage.getItem(STUDENT_ID_KEY)||user.uid;if(studentId!==user.uid){try{const claim=await dbMod.get(dbMod.ref(db,`claims/${studentId}/${user.uid}`));if(!claim.exists())throw new Error("missing claim");}catch{localStorage.removeItem(STUDENT_ID_KEY);localStorage.removeItem(RECOVERY_CODE_KEY);studentId=user.uid;}}localStorage.setItem(STUDENT_ID_KEY,studentId);return {uid:user.uid,studentId,isAnonymous:user.isAnonymous};},
+    async getProfile(studentId){const snap=await dbMod.get(dbMod.ref(db,`profiles/${studentId}`));return snap.exists()?snap.val():null;},
+    async saveProfile(studentId,nickname){const ref=dbMod.ref(db,`profiles/${studentId}`),snap=await dbMod.get(ref);if(snap.exists()){await dbMod.update(ref,{nickname:nickname.trim()});return {...snap.val(),nickname:nickname.trim()};}await dbMod.update(ref,{nickname:nickname.trim(),createdAt:dbMod.serverTimestamp()});return {nickname:nickname.trim(),createdAt:Date.now()};},
+    async syncOwnPublicProfile(studentId){await rebuildPublicProfile(studentId);},
+    async savePublicBook(studentId,title){if(title&&String(title).trim())await dbMod.set(dbMod.ref(db,`profiles/${studentId}/publicBook`),{title:String(title).trim(),updatedAt:dbMod.serverTimestamp()});else await dbMod.remove(dbMod.ref(db,`profiles/${studentId}/publicBook`));},
+    async ensureRecoveryCode(studentId){const user=await ensureStudent(),activeRef=dbMod.ref(db,`recoveryByStudent/${studentId}`),localCode=localStorage.getItem(RECOVERY_CODE_KEY);try{const activeSnap=await dbMod.get(activeRef),activeHash=activeSnap.exists()?activeSnap.val():null;if(localCode){const localHash=await hashRecoveryCode(localCode);if(activeHash===localHash)return {code:formatRecoveryCode(localCode),isNew:false};if(!activeHash&&studentId===user.uid){const mappingRef=dbMod.ref(db,`recovery/${localHash}`),mappingSnap=await dbMod.get(mappingRef);if(!mappingSnap.exists())await dbMod.set(mappingRef,studentId);else if(mappingSnap.val()!==studentId)throw new Error("Code-Kollision");await dbMod.set(activeRef,localHash);return {code:formatRecoveryCode(localCode),isNew:false};}localStorage.removeItem(RECOVERY_CODE_KEY);}if(activeHash||studentId!==user.uid)return {code:null,isNew:false,unavailable:true};const created=await createUniqueRecovery(studentId);await dbMod.set(activeRef,created.hash);localStorage.setItem(RECOVERY_CODE_KEY,created.code);return {code:created.code,isNew:true};}catch(err){return {code:localCode?formatRecoveryCode(localCode):null,isNew:false,pendingRules:true,error:err};}},
+    async recoverWithCode(value){const user=await ensureStudent(),code=formatRecoveryCode(value);if(!code)throw new Error("Bitte einen vollständigen Code im Format LIGA-XXXX-XXXX-XXXX-XXXX eingeben.");const hash=await hashRecoveryCode(code);let mappingSnap;try{mappingSnap=await dbMod.get(dbMod.ref(db,`recovery/${hash}`));}catch{throw new Error("Die Wiederherstellung ist in Firebase noch nicht freigeschaltet.");}if(!mappingSnap.exists())throw new Error("Dieser Wiederherstellungscode wurde nicht gefunden.");const studentId=mappingSnap.val();if(studentId!==user.uid){const claimRef=dbMod.ref(db,`claims/${studentId}/${user.uid}`),claimSnap=await dbMod.get(claimRef);if(!claimSnap.exists()){try{await dbMod.set(claimRef,hash);}catch{throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");}}}else{const activeSnap=await dbMod.get(dbMod.ref(db,`recoveryByStudent/${studentId}`));if(!activeSnap.exists()||activeSnap.val()!==hash)throw new Error("Dieser Wiederherstellungscode ist nicht mehr gültig. Bitte die Lehrkraft nach einem neuen Code fragen.");}localStorage.setItem(STUDENT_ID_KEY,studentId);localStorage.setItem(RECOVERY_CODE_KEY,code);return {uid:user.uid,studentId,isAnonymous:user.isAnonymous};},
+    subscribeState(callback){const sid=localStorage.getItem(STUDENT_ID_KEY)||auth.currentUser?.uid,cache={config:null,profiles:null,days:null,publicDays:null};const emit=()=>{if(cache.config&&cache.profiles&&cache.days&&cache.publicDays!==null)callback(JSON.parse(JSON.stringify(cache)));};let ownDaysUnsub=null;const configUnsub=dbMod.onValue(dbMod.ref(db,"config"),s=>{cache.config=s.val()||{};emit();});const profilesUnsub=dbMod.onValue(dbMod.ref(db,"profiles"),s=>{cache.profiles=s.val()||{};emit();});const publicUnsub=dbMod.onValue(dbMod.ref(db,"publicDays"),s=>{cache.publicDays=s.val()||{};emit();},()=>{cache.publicDays={};emit();});const allDaysUnsub=dbMod.onValue(dbMod.ref(db,"days"),s=>{cache.days=s.val()||{};emit();},()=>{if(ownDaysUnsub)return;ownDaysUnsub=dbMod.onValue(dbMod.ref(db,`days/${sid}`),s=>{cache.days={[sid]:s.val()||{}};emit();});});return ()=>{configUnsub();profilesUnsub();publicUnsub();allDaysUnsub();ownDaysUnsub?.();};},
+    async saveToday(studentId,entry,options={}){await dbMod.set(dbMod.ref(db,`days/${studentId}/${dateUtils.yyyyMmDd()}`),{...entry,updatedAt:dbMod.serverTimestamp()});await rebuildPublicProfile(studentId,entry.finished===true||options.shareBook===false?{clearBook:true}:{publicBook:options.shareBook===true?entry.book:null});},
+    async resetLocalStudent(){localStorage.removeItem(STUDENT_ID_KEY);localStorage.removeItem(RECOVERY_CODE_KEY);await authMod.signOut(auth);location.reload();}
   };
 }
 
-export async function createDataService(){
-  return isFirebaseConfigured()?createFirebaseStudentService():createLegacyDataService();
-}
+export async function createDataService(){return isFirebaseConfigured()?createFirebaseStudentService():createLegacyDataService();}
 export { dateUtils };
