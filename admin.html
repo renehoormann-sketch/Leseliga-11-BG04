@@ -27,7 +27,7 @@
 
   <section id="loginCard" class="card" style="max-width:560px;margin:40px auto">
     <div class="eyebrow">Admin</div><h2 style="margin-top:0">Lehrer-Login</h2>
-    <div id="demoCredentials" class="notice hidden" style="margin-bottom:14px">Demo-Zugang: <b>lehrer@demo.de</b> · Passwort <b>leseliga</b></div>
+    <div class="notice" style="margin-bottom:14px">🔐 Anmeldung ausschließlich über das hinterlegte Firebase-Administratorkonto. Zugangsdaten werden nicht im GitHub-Repository gespeichert.</div>
     <form id="loginForm">
       <label class="field"><span>E-Mail</span><input id="email" type="email" autocomplete="username" required></label>
       <label class="field"><span>Passwort</span><input id="password" type="password" autocomplete="current-password" required></label>
@@ -103,12 +103,12 @@
     </section>
 
     <div class="actions" style="justify-content:space-between">
-      <button id="resetDemoBtn" class="btn danger hidden">Demo-Daten zurücksetzen</button>
+      <button id="resetDemoBtn" class="btn danger hidden">Testdaten zurücksetzen</button>
       <button id="logoutBtn" class="btn ghost">Abmelden</button>
     </div>
   </div>
 </main>
-<script type="module" src="./admin.js?v=20260916-privacy1"></script>
+<script type="module" src="./admin.js?v=20260916-security1"></script>
 <script type="module" src="./admin-time.js?v=20260916-time1"></script>
 <script type="module" src="./admin-privacy.js?v=20260916-privacy1"></script>
 </body>
