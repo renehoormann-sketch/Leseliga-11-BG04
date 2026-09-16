@@ -1,4 +1,4 @@
-import { SEASON_PLAN } from "./stats.js?v=20260916-privacy1";
+import { SEASON_PLAN } from "./stats.js?v=20260916-privacy2";
 
 function dayNumber(date){
   const [y,m,d]=String(date).split("-").map(Number);
