@@ -65,64 +65,70 @@ function vagueSection(value){
   return /^(weiter|gelesen|lesen|buch|kapitel|seiten?|ein paar seiten|ca ?\d+ seiten?|\d+ seiten?)$/.test(text);
 }
 
+function groupedScore(signals){
+  const groups=new Map();
+  signals.forEach(signal=>groups.set(signal.group,Math.max(groups.get(signal.group)||0,signal.points)));
+  return [...groups.values()].reduce((sum,value)=>sum+value,0);
+}
+
 function analyze(uid){
   const records = activeRecords(uid);
   const signals=[];
-  const add=(points,text,code)=>signals.push({points,text,code});
+  const add=(points,text,code,group=code)=>signals.push({points,text,code,group});
   if(!records.length) return {uid,records,signals,score:0,level:"green",latestActivity:0};
   const today=localDate(Date.now());
 
   const future=records.filter(r=>r.date>today).length;
-  if(future) add(5,`${future} Eintrag${future===1?"":"e"} mit zukünftigem Datum`,"future");
+  if(future) add(5,`${future} Eintrag${future===1?"":"e"} mit zukünftigem Datum`,"future","date");
 
   const twos=records.filter(r=>Number(r.xp)===2).length;
-  if(records.length>=8&&twos/records.length>=0.9) add(2,`${twos} von ${records.length} Lesetagen mit 2 XP`,"two-ratio");
-  else if(records.length>=10&&twos/records.length>=0.8) add(1,`sehr hoher Anteil an 2-XP-Tagen (${twos}/${records.length})`,"two-ratio-soft");
+  if(records.length>=8&&twos/records.length>=0.9) add(2,`${twos} von ${records.length} Lesetagen mit 2 XP`,"two-ratio","xp-pattern");
+  else if(records.length>=10&&twos/records.length>=0.8) add(1,`sehr hoher Anteil an 2-XP-Tagen (${twos}/${records.length})`,"two-ratio-soft","xp-pattern");
 
   const run=longestTwoXpRun(records);
-  if(run>=7) add(3,`${run} Tage in Folge jeweils 2 XP`,"two-streak");
-  else if(run>=5) add(2,`${run} Tage in Folge jeweils 2 XP`,"two-streak-soft");
+  if(run>=7) add(3,`${run} Tage in Folge jeweils 2 XP`,"two-streak","xp-pattern");
+  else if(run>=5) add(2,`${run} Tage in Folge jeweils 2 XP`,"two-streak-soft","xp-pattern");
 
   const repetitions=new Map();
   records.forEach(r=>{const key=`${normalize(r.book)}|||${normalize(r.section)}`;if(key!=="|||")repetitions.set(key,(repetitions.get(key)||0)+1);});
   const maxRepeat=Math.max(0,...repetitions.values());
-  if(maxRepeat>=5) add(3,`derselbe Buch-/Abschnitt-Eintrag an ${maxRepeat} Tagen`,"repeat");
-  else if(maxRepeat>=3) add(2,`derselbe Buch-/Abschnitt-Eintrag an ${maxRepeat} Tagen`,"repeat-soft");
+  if(maxRepeat>=5) add(3,`derselbe Buch-/Abschnitt-Eintrag an ${maxRepeat} Tagen`,"repeat","entry-quality");
+  else if(maxRepeat>=3) add(2,`derselbe Buch-/Abschnitt-Eintrag an ${maxRepeat} Tagen`,"repeat-soft","entry-quality");
 
   const vague=records.filter(r=>vagueSection(r.section)).length;
-  if(records.length>=5&&vague>=4) add(2,`${vague} sehr ungenaue Abschnittsangaben`,"vague");
-  else if(records.length>=5&&vague>=3) add(1,`${vague} eher ungenaue Abschnittsangaben`,"vague-soft");
+  if(records.length>=5&&vague>=4) add(2,`${vague} sehr ungenaue Abschnittsangaben`,"vague","entry-quality");
+  else if(records.length>=5&&vague>=3) add(1,`${vague} eher ungenaue Abschnittsangaben`,"vague-soft","entry-quality");
 
   let regressions=0;
   const byBook=new Map();
   records.forEach(r=>{const book=normalize(r.book);if(!book)return;const p=progress(r.section);if(!p)return;const prev=byBook.get(book);if(prev&&prev.type===p.type&&p.value<prev.value-(p.type==="page"?5:1))regressions+=1;byBook.set(book,p);});
-  if(regressions>=2) add(1,`${regressions} auffällige Rücksprünge bei Seiten/Kapiteln`,"progress");
+  if(regressions>=2) add(1,`${regressions} auffällige Rücksprünge bei Seiten/Kapiteln`,"progress","entry-quality");
 
   const delayed=records.filter(r=>{
     if(!Number(r.updatedAt)||r.lastEditedBy==="teacher")return false;
     return dayNo(localDate(r.updatedAt))-dayNo(r.date)>=2;
   }).length;
-  if(delayed>=5) add(2,`${delayed} Einträge erst deutlich später gespeichert/geändert`,"delayed");
-  else if(delayed>=3) add(1,`${delayed} Einträge erst deutlich später gespeichert/geändert`,"delayed-soft");
+  if(delayed>=5) add(2,`${delayed} Einträge erst deutlich später gespeichert/geändert`,"delayed","timing");
+  else if(delayed>=3) add(1,`${delayed} Einträge erst deutlich später gespeichert/geändert`,"delayed-soft","timing");
 
   const editCounts=records.map(r=>Number(r.editCount||0));
   const totalEdits=editCounts.reduce((a,b)=>a+b,0),maxEdits=Math.max(0,...editCounts);
-  if(maxEdits>=4||totalEdits>=8) add(2,`ungewöhnlich viele nachträgliche Änderungen (${totalEdits})`,"edits");
-  else if(maxEdits>=2||totalEdits>=4) add(1,`mehrere nachträgliche Änderungen (${totalEdits})`,"edits-soft");
+  if(maxEdits>=4||totalEdits>=8) add(2,`ungewöhnlich viele nachträgliche Änderungen (${totalEdits})`,"edits","timing");
+  else if(maxEdits>=2||totalEdits>=4) add(1,`mehrere nachträgliche Änderungen (${totalEdits})`,"edits-soft","timing");
 
   const finished7=maxFinishedInWindow(records,7);
-  if(finished7>=6) add(2,`${finished7} als beendet markierte Bücher innerhalb von 7 Tagen`,"finished");
-  else if(finished7>=4) add(1,`${finished7} als beendet markierte Bücher innerhalb von 7 Tagen`,"finished-soft");
+  if(finished7>=6) add(2,`${finished7} als beendet markierte Bücher innerhalb von 7 Tagen`,"finished","book-pattern");
+  else if(finished7>=4) add(1,`${finished7} als beendet markierte Bücher innerhalb von 7 Tagen`,"finished-soft","book-pattern");
 
   const weeks=weeklyTotals(records);
   if(weeks.length>=4){
     const previous=weeks.slice(0,-1).map(([,xp])=>xp).sort((a,b)=>a-b);
     const baseline=previous[Math.floor(previous.length/2)]||0;
     const latest=weeks.at(-1)?.[1]||0;
-    if(baseline>=1&&latest>=6&&latest>=baseline*2.5) add(1,`deutlicher Sprung gegenüber der eigenen bisherigen Wochenleistung`,"surge");
+    if(baseline>=1&&latest>=6&&latest>=baseline*2.5) add(1,`deutlicher Sprung gegenüber der eigenen bisherigen Wochenleistung`,"surge","change");
   }
 
-  const score=signals.reduce((sum,s)=>sum+s.points,0);
+  const score=groupedScore(signals);
   const level=score>=5?"orange":score>=2?"yellow":"green";
   const latestActivity=Math.max(0,...records.map(r=>Number(r.updatedAt||r.createdAt||0)));
   return {uid,records,signals,score,level,latestActivity};
@@ -145,7 +151,7 @@ function hashString(value){let h=2166136261;for(const ch of String(value)){h^=ch
 
 function weeklyChecks(results){
   const today=localDate(Date.now()),week=monday(today),hidden=state.config?.hiddenStudents||{};
-  const eligible=results.filter(r=>!hidden[r.uid]&&state.profiles?.[r.uid]);
+  const eligible=results.filter(r=>!hidden[r.uid]&&state.profiles?.[r.uid]&&r.records.length>0);
   const active=eligible.filter(r=>{const {review,stale}=reviewFor(r);return !(review?.status==="cleared"&&!stale);});
   const picked=[];
   active.filter(r=>r.score>0).sort((a,b)=>{
@@ -164,7 +170,7 @@ function ensureUi(){
   const card=document.createElement("section");
   card.id="plausibilityV2Card";card.className="card";
   card.innerHTML=`<div class="section-head"><div><h3>🛡️ Plausibilitätsassistent 2.0</h3><p>Priorisiert kurze Buchchecks – keine automatische Sanktion</p></div><span class="badge">nur Lehrkraft</span></div>
-  <div class="notice" style="margin-bottom:14px">Hinweispunkte sind <b>keine Betrugswahrscheinlichkeit</b>. Viel Lesen allein erzeugt keine orange Stufe. Entscheidend sind mehrere voneinander unabhängige Muster.</div>
+  <div class="notice" style="margin-bottom:14px">Hinweispunkte sind <b>keine Betrugswahrscheinlichkeit</b>. Ähnliche Hinweise werden nur einmal gewichtet; viel Lesen allein erzeugt keine orange Stufe.</div>
   <div id="paRulesWarning" class="notice hidden" style="margin-bottom:14px"></div>
   <div class="flag-item" style="margin-bottom:14px"><b>🎯 Buchchecks dieser Woche</b><small id="paChecks">Wird berechnet …</small></div>
   <div id="paSummary" style="margin-bottom:12px"></div><div id="paList" class="flag-list"></div>
@@ -185,7 +191,7 @@ function render(){
   const orange=active.filter(r=>r.level==="orange").length,yellow=active.filter(r=>r.level==="yellow").length;
   document.getElementById("paSummary").innerHTML=`<b>${orange} 🟠 · ${yellow} 🟡</b> <span style="color:var(--muted)">von ${results.length} aktiven Profilen</span>`;
   const checks=weeklyChecks(results);
-  document.getElementById("paChecks").innerHTML=checks.picked.length?checks.picked.map(r=>{const name=esc(state.profiles?.[r.uid]?.nickname||"Ohne Namen"),meta=levelMeta(r.level);return `${r.kind==="Routinecheck"?"🔎":"📖"} <b>${name}</b> · ${r.kind}${r.kind!=="Routinecheck"?` (${meta.icon} ${r.score} P.)`:""}`;}).join("<br>"):"Noch keine Profile für einen Check verfügbar.";
+  document.getElementById("paChecks").innerHTML=checks.picked.length?checks.picked.map(r=>{const name=esc(state.profiles?.[r.uid]?.nickname||"Ohne Namen"),meta=levelMeta(r.level);return `${r.kind==="Routinecheck"?"🔎":"📖"} <b>${name}</b> · ${r.kind}${r.kind!=="Routinecheck"?` (${meta.icon} ${r.score} P.)`:""}`;}).join("<br>"):"Noch keine Profile mit Leseeinträgen für einen Check verfügbar.";
   const warn=document.getElementById("paRulesWarning");warn.classList.toggle("hidden",reviewsAvailable);warn.textContent=reviewsAvailable?"":"Die Auswertung funktioniert bereits. Für „geprüft/beobachten“ müssen noch die aktuellen Firebase-Regeln veröffentlicht werden.";
   const list=document.getElementById("paList");
   const relevant=active.filter(r=>r.score>0||r.review?.status==="watch");
