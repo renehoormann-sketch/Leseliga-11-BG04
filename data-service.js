@@ -76,6 +76,22 @@ async function createFirebaseService() {
     throw new Error("Es konnte kein eindeutiger Wiederherstellungscode erzeugt werden.");
   }
 
+  async function writeStudentEntry(studentId, date, entry) {
+    const entryRef = dbMod.ref(db, `days/${studentId}/${date}`);
+    const snap = await dbMod.get(entryRef);
+    const old = snap.exists() ? snap.val() : null;
+    const createdAt = Number(old?.createdAt || old?.updatedAt) || dbMod.serverTimestamp();
+    await dbMod.set(entryRef, {
+      ...entry,
+      createdAt,
+      updatedAt: dbMod.serverTimestamp(),
+      editCount: old ? Number(old.editCount || 0) + 1 : 0,
+      teacherEditCount: Number(old?.teacherEditCount || 0),
+      createdBy: old?.createdBy || "student",
+      lastEditedBy: "student"
+    });
+  }
+
   return {
     mode: "firebase",
     async initStudentSession() {
@@ -197,10 +213,7 @@ async function createFirebaseService() {
       return () => unsubs.forEach((u) => u());
     },
     async saveToday(studentId, entry) {
-      await dbMod.set(dbMod.ref(db, `days/${studentId}/${yyyyMmDd()}`), {
-        ...entry,
-        updatedAt: dbMod.serverTimestamp()
-      });
+      await writeStudentEntry(studentId, yyyyMmDd(), entry);
     },
     async resetLocalStudent() {
       localStorage.removeItem(STUDENT_ID_KEY);
@@ -224,9 +237,18 @@ async function createFirebaseService() {
       await dbMod.update(dbMod.ref(db, "config"), patch);
     },
     async adminUpsertDay(uid, date, entry) {
-      await dbMod.set(dbMod.ref(db, `days/${uid}/${date}`), {
+      const entryRef = dbMod.ref(db, `days/${uid}/${date}`);
+      const snap = await dbMod.get(entryRef);
+      const old = snap.exists() ? snap.val() : null;
+      const createdAt = Number(old?.createdAt || old?.updatedAt) || dbMod.serverTimestamp();
+      await dbMod.set(entryRef, {
         ...entry,
-        updatedAt: dbMod.serverTimestamp()
+        createdAt,
+        updatedAt: dbMod.serverTimestamp(),
+        editCount: Number(old?.editCount || 0),
+        teacherEditCount: old ? Number(old.teacherEditCount || 0) + 1 : 0,
+        createdBy: old?.createdBy || "teacher",
+        lastEditedBy: "teacher"
       });
     },
     async adminDeleteDay(uid, date) {
