@@ -1,11 +1,21 @@
-# 3-Minuten-Test
+# Schnelltest
 
-1. Ordner lokal mit `python3 -m http.server 8000` starten.
-2. `http://localhost:8000` öffnen.
-3. Nickname wählen.
-4. +1 oder +2 XP eintragen und Buch + Abschnitt ergänzen.
-5. In einem zweiten Tab `presentation.html` öffnen: Rangliste und Klassenziel ändern sich sofort.
-6. `admin.html` öffnen und mit `lehrer@demo.de` / `leseliga` anmelden.
-7. Dort Monatsziel verändern, Einträge korrigieren/löschen oder CSV exportieren.
+Die produktive Leseliga läuft ausschließlich mit Firebase; ein fest codierter Demo-Lehrerlogin ist deaktiviert.
 
-Tipp: Über „Nickname ändern / Testprofil wechseln“ in der Schüleransicht kannst du auf demselben Browser mehrere Test-Schüler nacheinander simulieren. Die Demo-Rangliste selbst bleibt dabei erhalten.
+## Schüleransicht testen
+
+1. Live-Seite öffnen.
+2. Nickname wählen bzw. vorhandenes Testprofil verwenden.
+3. +1 oder +2 XP eintragen und Buch + Abschnitt ergänzen.
+4. Optional Stoppuhr und Klassen-Bücherregal testen.
+5. Präsentationsansicht in einem zweiten Tab öffnen und prüfen, ob Rangliste und Klassenziel aktualisiert werden.
+
+## Lehrerbereich testen
+
+1. `admin.html` öffnen.
+2. Mit dem echten, in Firebase Authentication hinterlegten Administratorkonto anmelden.
+3. Rangliste, Korrekturen, CSV, Wiederherstellung und Season-Steuerung prüfen.
+
+## Sicherheitsregel
+
+Keine Testpasswörter oder echten Zugangsdaten in Quellcode, README oder Testanleitungen eintragen. Für Tests ausschließlich das Firebase-Administratorkonto oder getrennte, nicht im Repository gespeicherte Testkonten verwenden.
